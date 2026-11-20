@@ -39,6 +39,70 @@ export default function App() {
   const healthy = activeSensors.filter(s => !s.failed).length;
   const degraded = healthy < 3 || !espOnline;
 
+  // Load shared state and subscribe to Supabase database changes.
+  useEffect(() => {
+    let channel;
+    let mounted = true;
+    async function loadState() {
+      try {
+        const response = await fetch("/api/state", { cache: "no-store" });
+        if (!response.ok) throw new Error("Shared state API unavailable");
+        const data = await response.json();
+        if (mounted) {
+          if (data.state) { setSharedState(data.state); setSharedUpdatedAt(data.updatedAt); }
+          setSyncStatus("connected");
+        }
+      } catch { if (mounted) setSyncStatus("offline"); }
+    }
+    loadState();
+    if (supabase) {
+      channel = supabase.channel("theva-demo-state")
+        .on("postgres_changes", { event: "*", schema: "public", table: "demo_state", filter: "id=eq.1" }, payload => {
+          if (mounted && payload.new?.state) {
+            setSharedState(payload.new.state);
+            setSharedUpdatedAt(payload.new.updated_at);
+            setSyncStatus("connected");
+          }
+        })
+        .subscribe(status => {
+          if (!mounted) return;
+          if (status === "SUBSCRIBED") setSyncStatus("connected");
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setSyncStatus("offline");
+        });
+    } else setSyncStatus("not-configured");
+    return () => { mounted = false; if (channel && supabase) supabase.removeChannel(channel); };
+  }, []);
+
+  // Publish operator state whenever a control changes.
+  useEffect(() => {
+    if (page !== "operator" || !operatorToken) return;
+    const timer = setTimeout(async () => {
+      try {
+        setPublishError("");
+        const state = {
+          sensors: sensors.map(sensor => ({
+            id: sensor.id, name: sensor.name, value: sensor.value,
+            healthy: !faults.includes(sensor.id) && espOnline
+          })),
+          espOnline, source: "operator-simulation", mode,
+          publishedAt: new Date().toISOString()
+        };
+        const response = await fetch("/api/state", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
+          body: JSON.stringify({ state })
+        });
+        if (!response.ok) {
+          if (response.status === 401) throw new Error("Operator token rejected. Check the Vercel OPERATOR_ACCESS_TOKEN value.");
+          throw new Error("Could not publish state. Check the API and Supabase configuration.");
+        }
+        const data = await response.json();
+        setSharedState(data.state); setSharedUpdatedAt(data.updatedAt); setSyncStatus("connected");
+      } catch (error) { setPublishError(error.message); setSyncStatus("offline"); }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [page, operatorToken, sensors, faults, espOnline, mode]);
+
   useEffect(() => {
     const t = setInterval(() => setLastUpdate(new Date()), 5000);
     return () => clearInterval(t);
