@@ -174,7 +174,6 @@ export default function App() {
 
   // Publish operator state only while this browser owns the server-side lock.
   useEffect(() => {
-  useEffect(() => {
     if (page !== "operator" || !operatorToken || lockStatus !== "active") return;
     const timer = setTimeout(async () => {
       try {
