@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, CheckCircle2, CloudRain, Droplets, Gauge, Radio, RotateCcw, ShieldCheck, Signal, WifiOff } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, CloudRain, Droplets, Gauge, Radio, RotateCcw, ShieldCheck, Signal, WifiOff } from "lucide-react";\nimport { realtimeEnabled, supabase } from "./lib/supabase";
 
 const initialSensors = [
   { id: "moisture", name: "Soil moisture", unit: "Moisture", value: 22, icon: Droplets, description: "Water saturation in the slope" },
@@ -30,7 +30,7 @@ export default function App() {
   const [learning, setLearning] = useState("Yes");
   const [comment, setComment] = useState("");
   const [sessionStart, setSessionStart] = useState(Date.now());
-  const [secondsLeft, setSecondsLeft] = useState(420);
+  const [secondsLeft, setSecondsLeft] = useState(420);\n  const [operatorToken, setOperatorToken] = useState("");\n  const [tokenInput, setTokenInput] = useState("");\n  const [sharedState, setSharedState] = useState(null);\n  const [sharedUpdatedAt, setSharedUpdatedAt] = useState(null);\n  const [syncStatus, setSyncStatus] = useState(realtimeEnabled ? "connecting" : "not-configured");\n  const [publishError, setPublishError] = useState("");
 
   const activeSensors = sensors.map(s => ({ ...s, failed: faults.includes(s.id) || !espOnline }));
   const values = activeSensors.filter(s => !s.failed).map(s => s.value);
@@ -78,7 +78,7 @@ export default function App() {
     setPage("thanks");
   }
 
-  const live = page === "audience";
+  const live = page === "audience";\n  const audienceSensors = sharedState?.sensors?.length ? sharedState.sensors.map(s => ({ ...s, failed: !s.healthy })) : activeSensors;\n  const audienceValues = audienceSensors.filter(s => !s.failed).map(s => s.value);\n  const audienceRisk = assess(audienceValues);
   const showOperator = page === "operator" || page === "diagnostics" || page === "feedback-admin";
   const statusLabel = degraded ? "DEGRADED MONITORING" : "SYSTEM HEALTHY";
 
@@ -87,7 +87,7 @@ export default function App() {
       <a className="brand" href="#" onClick={e => {e.preventDefault(); setPage("operator");}}>
         <span className="brand-mark">T</span><span><b>THEVA LIVE</b><small>LANDSLIDE EARLY WARNING SYSTEM</small></span>
       </a>
-      <div className="top-actions"><span className="connection"><i className={espOnline ? "dot online" : "dot offline"} />{espOnline ? "ESP32 LINK" : "ESP32 OFFLINE"}</span><span className="mode-chip">DEMO BUILD 0.1</span></div>
+      <div className="top-actions"><span className="connection"><i className={"dot " + (syncStatus === "connected" ? "online" : "offline")} />{syncStatus === "connected" ? "CLOUD SYNC" : syncStatus === "not-configured" ? "LOCAL MODE" : "CLOUD OFFLINE"}</span><span className="mode-chip">DEMO BUILD 0.2</span></div>
     </header>
 
     {showOperator && <div className="workspace">
@@ -119,6 +119,10 @@ export default function App() {
               <button className={"fault-btn " + (failed ? "restore" : "")} onClick={() => toggleFault(sensor.id)}>{failed ? "Restore sensor" : "Simulate sensor fault"}</button>
             </section>;
           })}</div>
+          <div className="section-head"><div><h2>Live audience sync</h2><p>Enter the operator token configured in Vercel. Changes publish automatically to audience devices.</p></div><span className="pill">{syncStatus.toUpperCase()}</span></div>
+          <section className="controls-card"><div className="control-copy"><div className="control-icon"><Radio size={19}/></div><div><b>Operator access token</b><p>Token is held only in this browser tab.</p></div></div><input type="password" placeholder="Paste operator token" value={tokenInput} onChange={e => setTokenInput(e.target.value)} /><button className="btn secondary" onClick={() => setOperatorToken(tokenInput.trim())}>Connect operator</button></section>
+          {publishError && <p className="disclaimer">{publishError}</p>}
+          <p className="disclaimer">Cloud sync: {syncStatus}. Audience devices receive updates through Supabase Realtime when configured.</p>
           <div className="section-head"><div><h2>System controls</h2><p>Demonstrate communication failure and fallback behaviour.</p></div></div>
           <section className="controls-card">
             <div className="control-copy"><div className="control-icon"><WifiOff size={19}/></div><div><b>ESP32 communication</b><p>Simulate loss of the controller heartbeat.</p></div></div>
@@ -133,7 +137,7 @@ export default function App() {
       </main>
     </div>}
 
-    {page === "audience" && <main className="audience-page"><div className="audience-top"><span className="pill live-pill"><i className="dot online"/> LIVE DEMONSTRATION</span><span className="timer">SESSION ENDS IN {Math.floor(secondsLeft/60)}:{String(secondsLeft%60).padStart(2,"0")}</span></div><div className="audience-title"><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>Landslide Early Warning System</h1><p>Watch how changing slope conditions can trigger an early warning.</p></div><div className={"audience-risk " + risk.tone}><span>CURRENT INDICATION</span><h2>{risk.level}</h2><p>{risk.message}</p></div><div className="audience-sensors">{activeSensors.map(s => <div className="audience-sensor" key={s.id}><span className={"dot " + (s.failed ? "offline" : "online")}/><b>{s.name}</b><small>{s.failed ? "Sensor unavailable" : "Monitoring active"}</small></div>)}</div><p className="disclaimer">Educational demonstration only. This is not a real landslide warning service.</p><button className="btn secondary" onClick={() => setPage("feedback")}>Share feedback</button></main>}
+    {page === "audience" && <main className="audience-page"><div className="audience-top"><span className="pill live-pill"><i className="dot online"/> LIVE DEMONSTRATION</span><span className="timer">SESSION ENDS IN {Math.floor(secondsLeft/60)}:{String(secondsLeft%60).padStart(2,"0")}</span></div><div className="audience-title"><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>Landslide Early Warning System</h1><p>Watch how changing slope conditions can trigger an early warning.</p></div><div className={"audience-risk " + audienceRisk.tone}><span>CURRENT INDICATION</span><h2>{audienceRisk.level}</h2><p>{audienceRisk.message}</p></div><div className="audience-sensors">{audienceSensors.map(s => <div className="audience-sensor" key={s.id}><span className={"dot " + (s.failed ? "offline" : "online")}/><b>{s.name}</b><small>{s.failed ? "Sensor unavailable" : "Monitoring active"}</small></div>)}</div><p className="disclaimer">Educational demonstration only. This is not a real landslide warning service.</p><p className="disclaimer">Data: {sharedState ? "Shared live state" : "Local preview"} · {sharedUpdatedAt ? "Updated " + new Date(sharedUpdatedAt).toLocaleTimeString() : "Waiting for operator data"} · Cloud {syncStatus}</p><button className="btn secondary" onClick={() => setPage("feedback")}>Share feedback</button></main>}
 
     {page === "welcome" && <main className="welcome-page"><div className="welcome-art"><div className="mountain m1"/><div className="mountain m2"/><div className="sun"/></div><div className="welcome-content"><div className="eyebrow">A GRADE 2 SCIENCE PROJECT</div><h1>Small signals.<br/><em>Safer slopes.</em></h1><p className="welcome-lead">I'm Theva, and I'm exploring how technology can help detect landslide danger and protect lives.</p><div className="welcome-info"><span><ShieldCheck/> Learn how early warnings work</span><span><Activity/> Explore changing slope conditions</span><span><Radio/> Watch a live demonstration</span></div><button className="btn primary large" onClick={startAudience}>Explore the live demo <span>→</span></button><small className="welcome-note">A learning model · Not a real-world prediction system</small></div></main>}
 
