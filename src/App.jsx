@@ -32,7 +32,12 @@ export default function App() {
   const [comment, setComment] = useState("");
   const [sessionStart, setSessionStart] = useState(Date.now());
   const [secondsLeft, setSecondsLeft] = useState(420);
-  const [operatorToken, setOperatorToken] = useState("");\n  const [tokenInput, setTokenInput] = useState("");\n  const [sharedState, setSharedState] = useState(null);\n  const [sharedUpdatedAt, setSharedUpdatedAt] = useState(null);\n  const [syncStatus, setSyncStatus] = useState(realtimeEnabled ? "connecting" : "not-configured");\n  const [publishError, setPublishError] = useState("");
+  const [operatorToken, setOperatorToken] = useState("");
+  const [tokenInput, setTokenInput] = useState("");
+  const [sharedState, setSharedState] = useState(null);
+  const [sharedUpdatedAt, setSharedUpdatedAt] = useState(null);
+  const [syncStatus, setSyncStatus] = useState(realtimeEnabled ? "connecting" : "not-configured");
+  const [publishError, setPublishError] = useState("");
 
   const activeSensors = sensors.map(s => ({ ...s, failed: faults.includes(s.id) || !espOnline }));
   const values = activeSensors.filter(s => !s.failed).map(s => s.value);
@@ -145,7 +150,9 @@ export default function App() {
   }
 
   const live = page === "audience";
-  const audienceSensors = sharedState?.sensors?.length ? sharedState.sensors.map(s => ({ ...s, failed: !s.healthy })) : activeSensors;\n  const audienceValues = audienceSensors.filter(s => !s.failed).map(s => s.value);\n  const audienceRisk = assess(audienceValues);
+  const audienceSensors = sharedState?.sensors?.length ? sharedState.sensors.map(s => ({ ...s, failed: !s.healthy })) : activeSensors;
+  const audienceValues = audienceSensors.filter(s => !s.failed).map(s => s.value);
+  const audienceRisk = assess(audienceValues);
   const showOperator = page === "operator" || page === "diagnostics" || page === "feedback-admin";
   const statusLabel = degraded ? "DEGRADED MONITORING" : "SYSTEM HEALTHY";
 
