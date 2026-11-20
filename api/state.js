@@ -25,7 +25,11 @@ export default async function handler(req, res) {
       const supplied = (req.headers.authorization || "").replace(/^Bearer\s+/i,"");
       if (!expected || !supplied || supplied !== expected) return res.status(401).json({error:"Operator access denied."});
       const state = req.body?.state;
-      if (!state || !Array.isArray(state.sensors) || typeof state.espOnline !== "boolean") return res.status(400).json({error:"Invalid state payload."});
+      const ownerId = req.body?.ownerId;
+      if (!state || !Array.isArray(state.sensors) || typeof state.espOnline !== "boolean" || !ownerId) return res.status(400).json({error:"Invalid state payload."});
+      const { data: lock, error: lockError } = await db.from("operator_lock").select("owner_id,expires_at").eq("id",1).maybeSingle();
+      if (lockError) throw lockError;
+      if (!lock || lock.owner_id !== ownerId || new Date(lock.expires_at).getTime() <= Date.now()) return res.status(409).json({error:"This operator console does not hold the active lock. Reconnect as the active operator."});
       const { data, error } = await db.from("demo_state").upsert({id:1,state,updated_at:new Date().toISOString()}).select("state,updated_at").single();
       if (error) throw error;
       return res.status(200).json({state:data.state,updatedAt:data.updated_at});
