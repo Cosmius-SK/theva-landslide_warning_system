@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     }
     if (req.method === "POST") {
       const expected = process.env.OPERATOR_ACCESS_TOKEN;
-      const supplied = (req.headers.authorization || "").replace(/^Bearer\\s+/i,"");
+      const supplied = (req.headers.authorization || "").replace(/^Bearer\s+/i,"");
       if (!expected || !supplied || supplied !== expected) return res.status(401).json({error:"Operator access denied."});
       const state = req.body?.state;
       if (!state || !Array.isArray(state.sensors) || typeof state.espOnline !== "boolean") return res.status(400).json({error:"Invalid state payload."});
