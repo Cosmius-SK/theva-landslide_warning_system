@@ -162,6 +162,24 @@ export default function App() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not acquire operator lock.");
+      // Restore the last cloud state before this newly elected operator publishes.
+      const snapshotResponse = await fetch("/api/state", { cache: "no-store" });
+      if (!snapshotResponse.ok) throw new Error("Operator lock acquired, but the latest shared state could not be loaded. Try connecting again.");
+      const snapshot = await snapshotResponse.json();
+      if (snapshot.state) {
+        const saved = snapshot.state;
+        if (Array.isArray(saved.sensors)) {
+          setSensors(prev => prev.map(sensor => {
+            const remote = saved.sensors.find(item => item.id === sensor.id);
+            return remote ? { ...sensor, value: Number(remote.value) } : sensor;
+          }));
+          setFaults(saved.sensors.filter(item => item.healthy === false).map(item => item.id));
+        }
+        if (typeof saved.espOnline === "boolean") setEspOnline(saved.espOnline);
+        if (saved.mode) setMode(saved.mode);
+        setSharedState(saved);
+        setSharedUpdatedAt(snapshot.updatedAt);
+      }
       setOperatorToken(candidate);
       setLockStatus("active");
       setPublishError("");
@@ -267,7 +285,7 @@ export default function App() {
       </aside>
 
       <main className="main-content">
-        <div className="page-heading"><div><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>{page === "operator" ? "Operator console" : page === "diagnostics" ? "System diagnostics" : "Audience feedback"}</h1><p>Monitor the slope model and demonstrate how warning indicators respond.</p></div><button className="btn secondary" onClick={resetSystem}><RotateCcw size={15}/> Reset system</button></div>
+        <div className="page-heading"><div><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>{page === "operator" ? "Operator console" : page === "diagnostics" ? "System diagnostics" : "Audience feedback"}</h1><p>Monitor the slope model and demonstrate how warning indicators respond.</p></div><button className="btn secondary" onClick={resetSystem} disabled={showOperator && lockStatus !== "active"}><RotateCcw size={15}/> Reset system</button></div>
 
         {page === "operator" && <>
           <div className="status-strip"><div className="status-icon"><Radio size={20}/></div><div><b>{statusLabel}</b><small>{degraded ? "One or more inputs are unavailable. Risk and equipment health are assessed separately." : "All three simulated sensor channels are responding."}</small></div><span className="updated">Updated {lastUpdate.toLocaleTimeString()}</span></div>
@@ -281,9 +299,9 @@ export default function App() {
             return <section className={"sensor-card " + (failed ? "failed" : "")} key={sensor.id}>
               <div className="sensor-top"><div className="sensor-icon"><Icon size={19}/></div><span className={"sensor-state " + (failed ? "bad" : "good")}>{failed ? "FAULT" : "HEALTHY"}</span></div>
               <h3>{sensor.name}</h3><p>{sensor.description}</p>
-              <div className="slider-row"><input aria-label={sensor.name} type="range" min="0" max="100" value={sensor.value} onChange={e => changeValue(sensor.id, e.target.value)} disabled={failed}/><b>{sensor.value}</b></div>
+              <div className="slider-row"><input aria-label={sensor.name} type="range" min="0" max="100" value={sensor.value} onChange={e => changeValue(sensor.id, e.target.value)} disabled={failed || lockStatus !== "active"}/><b>{sensor.value}</b></div>
               <div className="scale"><span>LOW</span><span>HIGH</span></div>
-              <button className={"fault-btn " + (failed ? "restore" : "")} onClick={() => toggleFault(sensor.id)}>{failed ? "Restore sensor" : "Simulate sensor fault"}</button>
+              <button className={"fault-btn " + (failed ? "restore" : "")} onClick={() => toggleFault(sensor.id)} disabled={lockStatus !== "active"}>{failed ? "Restore sensor" : "Simulate sensor fault"}</button>
             </section>;
           })}</div>
           <div className="section-head"><div><h2>Live audience sync</h2><p>Enter the operator token configured in Vercel. Changes publish automatically to audience devices.</p></div><span className="pill">{syncStatus.toUpperCase()}</span></div>
@@ -294,9 +312,9 @@ export default function App() {
           <div className="section-head"><div><h2>System controls</h2><p>Demonstrate communication failure and fallback behaviour.</p></div></div>
           <section className="controls-card">
             <div className="control-copy"><div className="control-icon"><WifiOff size={19}/></div><div><b>ESP32 communication</b><p>Simulate loss of the controller heartbeat.</p></div></div>
-            <button className={espOnline ? "btn secondary" : "btn danger"} onClick={() => setEspOnline(v => !v)}>{espOnline ? "Disconnect ESP32" : "Reconnect ESP32"}</button>
+            <button className={espOnline ? "btn secondary" : "btn danger"} onClick={() => setEspOnline(v => !v)} disabled={lockStatus !== "active"}>{espOnline ? "Disconnect ESP32" : "Reconnect ESP32"}</button>
           </section>
-          <section className="controls-card"><div className="control-copy"><div className="control-icon"><Signal size={19}/></div><div><b>Operating preference</b><p>Automatic prefers healthy hardware; virtual mode is a manual demonstration override.</p></div></div><select value={mode} onChange={e => setMode(e.target.value)}><option value="auto">Automatic</option><option value="virtual">Virtual override</option><option value="hardware">Hardware only</option></select></section>
+          <section className="controls-card"><div className="control-copy"><div className="control-icon"><Signal size={19}/></div><div><b>Operating preference</b><p>Automatic prefers healthy hardware; virtual mode is a manual demonstration override.</p></div></div><select value={mode} onChange={e => setMode(e.target.value)} disabled={lockStatus !== "active"}><option value="auto">Automatic</option><option value="virtual">Virtual override</option><option value="hardware">Hardware only</option></select></section>
           <div className="disclaimer">Educational simulation only. The thresholds are illustrative and are not calibrated for real-world landslide prediction or evacuation decisions.</div>
         </>}
 
