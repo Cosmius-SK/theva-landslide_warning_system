@@ -33,6 +33,9 @@ export default function App() {
   const [sessionStart, setSessionStart] = useState(Date.now());
   const [secondsLeft, setSecondsLeft] = useState(420);
   const [operatorToken, setOperatorToken] = useState("");
+  const [operatorOwnerId] = useState(() => crypto.randomUUID());
+  const [lockStatus, setLockStatus] = useState("unlocked");
+  const [lockError, setLockError] = useState("");
   const [tokenInput, setTokenInput] = useState("");
   const [sharedState, setSharedState] = useState(null);
   const [sharedUpdatedAt, setSharedUpdatedAt] = useState(null);
@@ -118,9 +121,61 @@ export default function App() {
     };
   }, [page]);
 
-  // Publish operator state whenever a control changes.
+  // Keep the server-side operator lease alive while this console is active.
   useEffect(() => {
-    if (page !== "operator" || !operatorToken) return;
+    if (!operatorToken || lockStatus !== "active") return;
+    async function renewLock() {
+      try {
+        const response = await fetch("/api/operator-lock", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
+          body: JSON.stringify({ action: "renew", ownerId: operatorOwnerId })
+        });
+        if (!response.ok) throw new Error("Operator lock lost. This console is now read-only; another operator may have taken over.");
+      } catch (error) {
+        setLockStatus("lost");
+        setLockError(error.message);
+        setOperatorToken("");
+      }
+    }
+    const timer = window.setInterval(renewLock, 10000);
+    const releaseOnClose = () => {
+      fetch("/api/operator-lock", {
+        method: "POST", keepalive: true,
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
+        body: JSON.stringify({ action: "release", ownerId: operatorOwnerId })
+      }).catch(() => {});
+    };
+    window.addEventListener("pagehide", releaseOnClose);
+    return () => { window.clearInterval(timer); window.removeEventListener("pagehide", releaseOnClose); };
+  }, [operatorToken, lockStatus, operatorOwnerId]);
+
+  async function connectOperator() {
+    const candidate = tokenInput.trim();
+    if (!candidate) { setLockError("Enter the operator access token first."); return; }
+    setLockError("");
+    try {
+      const response = await fetch("/api/operator-lock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + candidate },
+        body: JSON.stringify({ action: "acquire", ownerId: operatorOwnerId })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not acquire operator lock.");
+      setOperatorToken(candidate);
+      setLockStatus("active");
+      setPublishError("");
+    } catch (error) {
+      setOperatorToken("");
+      setLockStatus("blocked");
+      setLockError(error.message);
+    }
+  }
+
+  // Publish operator state only while this browser owns the server-side lock.
+  useEffect(() => {
+  useEffect(() => {
+    if (page !== "operator" || !operatorToken || lockStatus !== "active") return;
     const timer = setTimeout(async () => {
       try {
         setPublishError("");
@@ -135,7 +190,7 @@ export default function App() {
         const response = await fetch("/api/state", {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
-          body: JSON.stringify({ state })
+          body: JSON.stringify({ state, ownerId: operatorOwnerId })
         });
         if (!response.ok) {
           if (response.status === 401) throw new Error("Operator token rejected. Check the Vercel OPERATOR_ACCESS_TOKEN value.");
@@ -146,7 +201,7 @@ export default function App() {
       } catch (error) { setPublishError(error.message); setSyncStatus("offline"); }
     }, 250);
     return () => clearTimeout(timer);
-  }, [page, operatorToken, sensors, faults, espOnline, mode]);
+  }, [page, operatorToken, operatorOwnerId, lockStatus, sensors, faults, espOnline, mode]);
 
   useEffect(() => {
     const t = setInterval(() => setLastUpdate(new Date()), 5000);
@@ -233,7 +288,8 @@ export default function App() {
             </section>;
           })}</div>
           <div className="section-head"><div><h2>Live audience sync</h2><p>Enter the operator token configured in Vercel. Changes publish automatically to audience devices.</p></div><span className="pill">{syncStatus.toUpperCase()}</span></div>
-          <section className="controls-card"><div className="control-copy"><div className="control-icon"><Radio size={19}/></div><div><b>Operator access token</b><p>Token is held only in this browser tab.</p></div></div><input type="password" placeholder="Paste operator token" value={tokenInput} onChange={e => setTokenInput(e.target.value)} /><button className="btn secondary" onClick={() => setOperatorToken(tokenInput.trim())}>Connect operator</button></section>
+          <section className="controls-card"><div className="control-copy"><div className="control-icon"><Radio size={19}/></div><div><b>Single operator access</b><p>{lockStatus === "active" ? "This browser owns the live operator session." : "Only one browser can control and publish the live demonstration at a time."}</p></div></div><input type="password" placeholder="Paste operator token" value={tokenInput} onChange={e => setTokenInput(e.target.value)} /><button className="btn secondary" onClick={connectOperator} disabled={lockStatus === "active"}>{lockStatus === "active" ? "Operator connected" : "Connect operator"}</button></section>
+          {lockError && <p className="disclaimer">{lockError}</p>}
           {publishError && <p className="disclaimer">{publishError}</p>}
           <p className="disclaimer">Cloud sync: {syncStatus}. Audience devices receive updates through Supabase Realtime when configured.</p>
           <div className="section-head"><div><h2>System controls</h2><p>Demonstrate communication failure and fallback behaviour.</p></div></div>
