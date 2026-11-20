@@ -79,6 +79,45 @@ export default function App() {
     return () => { mounted = false; if (channel && supabase) supabase.removeChannel(channel); };
   }, []);
 
+  // Audience fallback sync: poll the authoritative API as well as Realtime.
+  // This recovers from missed websocket events, mobile sleep, and reconnects.
+  useEffect(() => {
+    if (page !== "audience") return;
+    let stopped = false;
+    let inFlight = false;
+    async function refreshSharedState() {
+      if (stopped || inFlight || document.visibilityState === "hidden") return;
+      inFlight = true;
+      try {
+        const response = await fetch("/api/state?refresh=" + Date.now(), { cache: "no-store" });
+        if (!response.ok) throw new Error("Shared state unavailable");
+        const data = await response.json();
+        if (!stopped && data.state) {
+          setSharedState(data.state);
+          setSharedUpdatedAt(data.updatedAt);
+          setSyncStatus("connected");
+        }
+      } catch {
+        if (!stopped) setSyncStatus("offline");
+      } finally {
+        inFlight = false;
+      }
+    }
+    const onVisibility = () => { if (document.visibilityState === "visible") refreshSharedState(); };
+    window.addEventListener("focus", refreshSharedState);
+    window.addEventListener("online", refreshSharedState);
+    document.addEventListener("visibilitychange", onVisibility);
+    refreshSharedState();
+    const timer = window.setInterval(refreshSharedState, 2000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshSharedState);
+      window.removeEventListener("online", refreshSharedState);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [page]);
+
   // Publish operator state whenever a control changes.
   useEffect(() => {
     if (page !== "operator" || !operatorToken) return;
