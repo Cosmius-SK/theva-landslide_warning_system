@@ -10,6 +10,7 @@ const initialSensors = [
 function assess(values) {
   const high = values.filter(v => v >= 60).length;
   const critical = values.filter(v => v >= 80).length;
+  if (values.length === 0) return { level: "Unavailable", tone: "watch", message: "No healthy sensor inputs are available. The system cannot assess the simulated slope." };
   if (critical >= 2) return { level: "Evacuation", tone: "critical", message: "Multiple indicators are critical. Evacuate the demonstration zone." };
   if (critical >= 1 || high >= 2) return { level: "High", tone: "high", message: "High-risk conditions detected. Take precautionary action." };
   if (values.some(v => v >= 35)) return { level: "Watch", tone: "watch", message: "Conditions are changing. Continue monitoring the slope." };
@@ -17,7 +18,7 @@ function assess(values) {
 }
 
 export default function App() {
-  const [page, setPage] = useState("operator");
+  const [page, setPage] = useState(window.location.pathname.startsWith("/operator") ? "operator" : "welcome");
   const [sensors, setSensors] = useState(initialSensors);
   const [faults, setFaults] = useState([]);
   const [espOnline, setEspOnline] = useState(true);
@@ -32,8 +33,8 @@ export default function App() {
   const [secondsLeft, setSecondsLeft] = useState(420);
 
   const activeSensors = sensors.map(s => ({ ...s, failed: faults.includes(s.id) || !espOnline }));
-  const values = activeSensors.map(s => s.value);
-  const risk = useMemo(() => assess(values), [sensors]);
+  const values = activeSensors.filter(s => !s.failed).map(s => s.value);
+  const risk = useMemo(() => assess(values), [sensors, faults, espOnline]);
   const healthy = activeSensors.filter(s => !s.failed).length;
   const degraded = healthy < 3 || !espOnline;
 
