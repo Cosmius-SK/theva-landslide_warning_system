@@ -1,53 +1,35 @@
 # Theva Live — Landslide Early Warning System
 
-An educational demonstration application for Theva's Grade 2 science project.
+Educational demonstration app. This is not a real landslide warning service.
 
 ## Run locally
+Requires Node.js 20+. Run `npm install` then `npm run dev`.
 
-Requirements: Node.js 20 or newer.
+## Shared real-time state setup
 
-```bash
-npm install
-npm run dev
-```
+1. Create a Supabase project.
+2. Run [supabase/schema.sql](supabase/schema.sql) in the Supabase SQL Editor.
+3. In Vercel → Project → Settings → Environment Variables, add the variables in [.env.example](.env.example).
+4. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for the browser client.
+5. Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `OPERATOR_ACCESS_TOKEN` as server-only variables. Never prefix these secrets with `VITE_`.
+6. Redeploy after adding environment variables.
+7. Open `/operator`, enter the operator token, publish a test value. On a second device, start the audience demo and verify it updates.
 
-Vite prints the local development URL. To create a production build:
+## API
+- `GET /api/state`: public read of current demo state.
+- `POST /api/state`: operator-token protected state update.
+- Supabase Postgres Changes broadcasts row updates to audience browsers.
 
-```bash
-npm run build
-npm run preview
-```
+RLS permits public reads only. Browser clients cannot write to the state table. All writes pass through the Vercel API and are checked against the server-side operator token.
 
-## Current milestone: UI and simulation foundation
+## Current milestone
+This milestone adds shared state and live audience subscription. The seven-minute timer is still client-side; server-enforced sessions, persistent feedback, full operator authentication, and ESP32 telemetry remain later milestones.
 
-- Operator console with three simulated inputs.
-- Illustrative risk assessment and separate sensor-health status.
-- Sensor fault injection and ESP32-link failure simulation.
-- Diagnostics view.
-- Audience read-only view with a seven-minute client-side demonstration timer.
-- Feedback form and CSV export (currently browser-session memory only).
-- Responsive layout.
-
-## Important limitations
-
-This is a UI prototype. It is not connected to an ESP32, Vercel Realtime, a database, or durable session storage. Audience sessions and feedback are currently local client-side state; the seven-minute timer is not server-enforced. Do not present it as a real landslide forecasting or public warning service.
-
-The demonstration thresholds are illustrative only:
-- Evacuation: at least two inputs >= 80
-- High: at least one input >= 80, or at least two inputs >= 60
-- Watch: any input >= 35
+## Illustrative risk model
+- Evacuation: at least two healthy inputs >= 80
+- High: at least one healthy input >= 80, or at least two healthy inputs >= 60
+- Watch: any healthy input >= 35
 - Safe: otherwise
+- Unavailable: no healthy inputs
 
-Sensor health and landslide indication are intentionally separate.
-
-## Planned milestones
-
-1. Complete the local operator/audience experience and verify interaction flows.
-2. Add ESP32 telemetry ingestion and health/heartbeat monitoring.
-3. Add shared realtime state and server-enforced audience sessions.
-4. Persist feedback and demonstration history; protect operator/admin routes.
-5. Deploy to Vercel and generate the exhibition QR URL.
-
-## Project safety
-
-This is an educational model using simulated inputs. It is not calibrated, validated, or suitable for real-world landslide prediction, evacuation, or emergency response.
+Not calibrated for real-world prediction or emergency decisions.
