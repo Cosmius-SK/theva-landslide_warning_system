@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "POST") { res.setHeader("Allow","POST, OPTIONS"); return res.status(405).json({error:"Method not allowed."}); }
   const expected = process.env.OPERATOR_ACCESS_TOKEN;
-  const supplied = (req.headers.authorization || "").replace(/^Bearer\\s+/i,"");
+  const supplied = (req.headers.authorization || "").replace(/^Bearer\s+/i,"");
   if (!expected || !supplied || supplied !== expected) return res.status(401).json({error:"Operator access denied."});
   const { ownerId, action } = req.body || {};
   if (!ownerId || !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(ownerId) || !["acquire","renew","release"].includes(action)) return res.status(400).json({error:"Invalid operator lock request."});
