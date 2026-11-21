@@ -12,10 +12,54 @@ function assess(values) {
   const high = values.filter(v => v >= 60).length;
   const critical = values.filter(v => v >= 80).length;
   if (values.length === 0) return { level: "Unavailable", tone: "watch", message: "No healthy sensor inputs are available. The system cannot assess the simulated slope." };
-  if (critical >= 2) return { level: "Evacuation", tone: "critical", message: "Multiple indicators are critical. Evacuate the demonstration zone." };
-  if (critical >= 1 || high >= 2) return { level: "High", tone: "high", message: "High-risk conditions detected. Take precautionary action." };
-  if (values.some(v => v >= 35)) return { level: "Watch", tone: "watch", message: "Conditions are changing. Continue monitoring the slope." };
-  return { level: "Safe", tone: "safe", message: "No warning threshold is currently crossed in this simulation." };
+  if (critical >= 2) return { level: "Evacuation", tone: "critical", message: "The model's highest alert is on. Pause the demonstration and ask the grown-up leading it what happens next." };
+  if (critical >= 1 || high >= 2) return { level: "High", tone: "high", message: "Several signals are high. The model is showing a big change in the slope." };
+  if (values.some(v => v >= 35)) return { level: "Watch", tone: "watch", message: "A reading is rising. Let's keep watching how the slope model changes." };
+  return { level: "Safe", tone: "safe", message: "The slope model is calm right now. Try changing a sensor to see what happens." };
+}
+
+function HillScene({ sensors, risk, audience = false }) {
+  const moisture = Number(sensors.find(s => s.id === "moisture")?.value || 0);
+  const rainfall = Number(sensors.find(s => s.id === "rainfall")?.value || 0);
+  const movement = Number(sensors.find(s => s.id === "movement")?.value || 0);
+  const unstable = risk.tone === "high" || risk.tone === "critical";
+  const wet = moisture >= 35 || rainfall >= 35;
+  const sensorStates = [
+    { id: "moisture", label: "Soil moisture", value: moisture, active: moisture >= 35 },
+    { id: "rainfall", label: "Rainfall", value: rainfall, active: rainfall >= 35 },
+    { id: "movement", label: "Ground movement", value: movement, active: movement >= 35 }
+  ];
+  const explanation = risk.tone === "critical"
+    ? "The model's highest alert is on. Let's pause our demonstration and ask our teacher what to do next."
+    : unstable
+      ? "Some readings are very high, so the model shows the slope changing a lot."
+      : wet
+        ? "Rain is soaking into the soil. Wet soil can get heavier, so let's keep watching."
+        : movement >= 35
+          ? "The ground movement number is going up. Let's watch what happens to the slope."
+          : "The slope model is calm right now. Try raising a sensor to see how the model changes.";
+  return <section className={"hill-scene " + risk.tone + (audience ? " audience-hill" : "")} aria-label="Illustration of slope conditions">
+    <div className="hill-scene-head"><div><span className="card-kicker">LIVE SLOPE MODEL</span><h3>{risk.level === "Evacuation" ? "Evacuation alert in model" : unstable ? "Slope under stress" : wet ? "Water entering the slope" : "Slope conditions"}</h3></div><span className={"hill-risk-state " + risk.tone}>{risk.level === "Evacuation" ? "⚠ " : ""}{risk.level}</span></div>
+    <svg className="hill-illustration" viewBox="0 0 760 300" role="img" aria-label={`Illustrated hillside. Soil moisture ${moisture}, rainfall ${rainfall}, ground movement ${movement}. Risk: ${risk.level}.`}>
+      <defs><linearGradient id="hillSky" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#183c43"/><stop offset="1" stopColor="#6f9b82"/></linearGradient><linearGradient id="hillSoil" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#9b8058"/><stop offset="1" stopColor="#4b4936"/></linearGradient></defs>
+      <rect width="760" height="300" rx="16" fill="url(#hillSky)"/>
+      <circle cx="625" cy="58" r="27" fill="#f3d995" opacity=".95"/>
+      <path d="M0 205 L115 105 L210 162 L330 55 L475 183 L570 112 L760 206 V300 H0Z" fill="#345c50"/>
+      <path d="M0 218 Q120 188 220 196 Q330 203 420 150 Q520 112 610 160 Q690 183 760 169 V300 H0Z" fill="#6b8c61"/>
+      <path d="M0 228 Q140 205 250 214 Q390 219 480 170 Q600 142 760 184 V300 H0Z" fill="url(#hillSoil)"/>
+      <path d="M0 255 Q160 231 285 248 T530 218 T760 225" fill="none" stroke="#c2a77a" strokeWidth="3" opacity=".65"/>
+      <g className={wet ? "rain-lines active" : "rain-lines"} stroke="#c4e8ed" strokeWidth="3" strokeLinecap="round"><path d="M110 28l-9 20 M148 46l-9 20 M190 25l-9 20 M230 49l-9 20 M270 30l-9 20"/></g>
+      {sensorStates.map((s,i)=><g key={s.id} className={"hill-marker " + (s.active ? "active" : "")} transform={`translate(${[188,405,618][i]} ${[198,169,173][i]})`}><circle r="15" className="marker-halo"/><circle r="9" fill={s.active ? "#ffd28a" : "#b8ebc8"} stroke="#17382d" strokeWidth="4"/></g>)}
+      <g fill="#e6f5e9" fontSize="12" fontFamily="DM Mono, monospace"><text x="150" y="183">MOISTURE</text><text x="367" y="151">RAINFALL</text><text x="574" y="153">MOVEMENT</text></g>
+      <path d={movement >= 60 ? "M430 180l-16 14 18 9-12 17" : "M430 180l-8 9 9 6"} fill="none" stroke={unstable ? "#ffb39b" : "#d6c39a"} strokeWidth={movement >= 60 ? 5 : 2} strokeLinecap="round" className="slope-crack"/>
+      <path d="M0 228 Q140 205 250 214 Q390 219 480 170 Q600 142 760 184" fill="none" stroke="#d8c092" strokeWidth="2" opacity=".75"/>
+      {unstable && <path d="M485 163q30 18 52 42l-18 8q-24-21-42-27" fill="#d9a27c" opacity=".9" className="soil-shift"/>}
+      {risk.tone === "critical" && <path d="M492 157q45 24 70 58l-16 8q-33-24-64-40" fill="#e99b70" opacity=".95" className="soil-shift"/>}
+    </svg>
+    <div className="hill-readings">{sensorStates.map(s=><span className={s.active ? "reading-active" : ""} key={s.id}><b>{s.value}%</b>{s.label}</span>)}</div>
+    <div className="hill-explanation"><span className="theva-guide-mark" aria-hidden="true">T</span><div className="theva-guide-copy"><b>Theva says</b><p>{explanation}</p></div></div>
+    <div className="hill-steps"><span className={rainfall >= 35 ? "step-active" : ""}>1 <b>Rain adds water</b></span><i>→</i><span className={moisture >= 35 ? "step-active" : ""}>2 <b>Soil gets heavier</b></span><i>→</i><span className={movement >= 35 ? "step-active" : ""}>3 <b>Ground may move</b></span></div>
+  </section>;
 }
 
 export default function App() {
@@ -293,6 +337,7 @@ export default function App() {
             <section className={"risk-card " + risk.tone}><div className="card-kicker">CURRENT LANDSLIDE INDICATION</div><div className="risk-main"><div><div className="risk-level">{risk.level}</div><p>{risk.message}</p></div><div className="risk-emblem"><AlertTriangle size={30}/></div></div><div className="risk-foot"><span>DEMO THRESHOLD MODEL</span><span>NOT A REAL FORECAST</span></div></section>
             <section className="health-card"><div className="card-kicker">SENSOR AVAILABILITY</div><div className="health-number">{healthy}<small> / 3</small></div><div className="health-track"><span style={{width: (healthy/3*100)+"%"}}/></div><p>{healthy === 3 ? "All inputs healthy" : healthy + " of 3 inputs responding"}</p></section>
           </div>
+          <HillScene sensors={sensors} risk={risk} />
           <div className="section-head"><div><h2>Sensor inputs</h2><p>Adjust the virtual controls or inject a sensor fault.</p></div><span className="pill">SIMULATED INPUTS</span></div>
           <div className="sensor-grid">{sensors.map(sensor => {
             const Icon = sensor.icon; const failed = faults.includes(sensor.id) || !espOnline;
@@ -323,7 +368,7 @@ export default function App() {
       </main>
     </div>}
 
-    {page === "audience" && <main className="audience-page"><div className="audience-top"><span className="pill live-pill"><i className="dot online"/> LIVE DEMONSTRATION</span><span className="timer">SESSION ENDS IN {Math.floor(secondsLeft/60)}:{String(secondsLeft%60).padStart(2,"0")}</span></div><div className="audience-title"><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>Landslide Early Warning System</h1><p>Watch how changing slope conditions can trigger an early warning.</p></div><div className={"audience-risk " + audienceRisk.tone}><span>CURRENT INDICATION</span><h2>{audienceRisk.level}</h2><p>{audienceRisk.message}</p></div><div className="audience-sensors">{audienceSensors.map(s => <div className="audience-sensor" key={s.id}><span className={"dot " + (s.failed ? "offline" : "online")}/><b>{s.name}</b><small>{s.failed ? "Sensor unavailable" : "Monitoring active"}</small></div>)}</div><p className="disclaimer">Educational demonstration only. This is not a real landslide warning service.</p><p className="disclaimer">Data: {sharedState ? "Shared live state" : "Local preview"} · {sharedUpdatedAt ? "Updated " + new Date(sharedUpdatedAt).toLocaleTimeString() : "Waiting for operator data"} · Cloud {syncStatus}</p><button className="btn secondary" onClick={() => setPage("feedback")}>Share feedback</button></main>}
+    {page === "audience" && <main className="audience-page"><div className="audience-top"><span className="pill live-pill"><i className="dot online"/> LIVE DEMONSTRATION</span><span className="timer">SESSION ENDS IN {Math.floor(secondsLeft/60)}:{String(secondsLeft%60).padStart(2,"0")}</span></div><div className="audience-title"><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>Landslide Early Warning System</h1><p>Watch how changing slope conditions can trigger an early warning.</p></div><HillScene sensors={audienceSensors} risk={audienceRisk} audience /><div className={"audience-risk " + audienceRisk.tone}><span>CURRENT INDICATION</span><h2>{audienceRisk.level}</h2><p>{audienceRisk.message}</p></div><div className="audience-sensors">{audienceSensors.map(s => <div className="audience-sensor" key={s.id}><span className={"dot " + (s.failed ? "offline" : "online")}/><b>{s.name}</b><small>{s.failed ? "Sensor unavailable" : "Monitoring active"}</small></div>)}</div><p className="disclaimer">Educational demonstration only. This is not a real landslide warning service.</p><p className="disclaimer">Data: {sharedState ? "Shared live state" : "Local preview"} · {sharedUpdatedAt ? "Updated " + new Date(sharedUpdatedAt).toLocaleTimeString() : "Waiting for operator data"} · Cloud {syncStatus}</p><button className="btn secondary" onClick={() => setPage("feedback")}>Share feedback</button></main>}
 
     {page === "welcome" && <main className="welcome-page"><div className="welcome-art"><div className="mountain m1"/><div className="mountain m2"/><div className="sun"/></div><div className="welcome-content"><div className="eyebrow">A GRADE 2 SCIENCE PROJECT</div><h1>Small signals.<br/><em>Safer slopes.</em></h1><p className="welcome-lead">I'm Theva, and I'm exploring how technology can help detect landslide danger and protect lives.</p><div className="welcome-info"><span><ShieldCheck/> Learn how early warnings work</span><span><Activity/> Explore changing slope conditions</span><span><Radio/> Watch a live demonstration</span></div><button className="btn primary large" onClick={startAudience}>Explore the live demo <span>→</span></button><small className="welcome-note">A learning model · Not a real-world prediction system</small></div></main>}
 
