@@ -24,9 +24,23 @@ function HillScene({ sensors, risk, audience = false }) {
   const movement = Number(sensors.find(s => s.id === "movement")?.value || 0);
   const unstable = risk.tone === "high" || risk.tone === "critical";
   const wet = moisture >= 35 || rainfall >= 35;
+  const sensorStates = [
+    { id: "moisture", label: "Soil moisture", value: moisture, active: moisture >= 35 },
+    { id: "rainfall", label: "Rainfall", value: rainfall, active: rainfall >= 35 },
+    { id: "movement", label: "Ground movement", value: movement, active: movement >= 35 }
+  ];
+  const explanation = risk.tone === "critical"
+    ? "Two or more signals have reached critical levels in this demonstration. The model shows an evacuation-level alert."
+    : unstable
+      ? "One signal is critical, or several are high. The slope model is showing strong signs of instability."
+      : wet
+        ? "Rain and moisture are increasing the water in the slope. Watch for ground movement as the soil becomes heavier."
+        : movement >= 35
+          ? "The ground movement signal is rising. The model is watching for changes in slope stability."
+          : "The model is currently stable. Increase a sensor reading to see how rain, soil moisture, and movement affect the warning.";
   return <section className={"hill-scene " + risk.tone + (audience ? " audience-hill" : "")} aria-label="Illustration of slope conditions">
-    <div className="hill-scene-head"><div><span className="card-kicker">LIVE SLOPE MODEL</span><h3>{unstable ? "Slope under stress" : wet ? "Conditions changing" : "Slope conditions"}</h3></div><span className="hill-live"><i className="dot online"/> LIVE MODEL</span></div>
-    <svg className="hill-illustration" viewBox="0 0 760 300" role="img" aria-label={`Illustrated hillside. Soil moisture ${moisture}, rainfall ${rainfall}, ground movement ${movement}.`}>
+    <div className="hill-scene-head"><div><span className="card-kicker">LIVE SLOPE MODEL</span><h3>{risk.tone === "critical" ? "Critical slope conditions" : unstable ? "Slope under stress" : wet ? "Water entering the slope" : "Slope conditions"}</h3></div><span className="hill-live"><i className="dot online"/> LIVE MODEL</span></div>
+    <svg className="hill-illustration" viewBox="0 0 760 300" role="img" aria-label={`Illustrated hillside. Soil moisture ${moisture}, rainfall ${rainfall}, ground movement ${movement}. Risk: ${risk.level}.`}>
       <defs><linearGradient id="hillSky" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#183c43"/><stop offset="1" stopColor="#6f9b82"/></linearGradient><linearGradient id="hillSoil" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#9b8058"/><stop offset="1" stopColor="#4b4936"/></linearGradient></defs>
       <rect width="760" height="300" rx="16" fill="url(#hillSky)"/>
       <circle cx="625" cy="58" r="27" fill="#f3d995" opacity=".95"/>
@@ -35,14 +49,16 @@ function HillScene({ sensors, risk, audience = false }) {
       <path d="M0 228 Q140 205 250 214 Q390 219 480 170 Q600 142 760 184 V300 H0Z" fill="url(#hillSoil)"/>
       <path d="M0 255 Q160 231 285 248 T530 218 T760 225" fill="none" stroke="#c2a77a" strokeWidth="3" opacity=".65"/>
       <g className={wet ? "rain-lines active" : "rain-lines"} stroke="#c4e8ed" strokeWidth="3" strokeLinecap="round"><path d="M110 28l-9 20 M148 46l-9 20 M190 25l-9 20 M230 49l-9 20 M270 30l-9 20"/></g>
-      <g fill="#b8ebc8" stroke="#17382d" strokeWidth="4"><circle cx="188" cy="198" r="9"/><circle cx="405" cy="169" r="9"/><circle cx="618" cy="173" r="9"/></g>
+      {sensorStates.map((s,i)=><g key={s.id} className={"hill-marker " + (s.active ? "active" : "")} transform={`translate(${[188,405,618][i]} ${[198,169,173][i]})`}><circle r="15" className="marker-halo"/><circle r="9" fill={s.active ? "#ffd28a" : "#b8ebc8"} stroke="#17382d" strokeWidth="4"/></g>)}
       <g fill="#e6f5e9" fontSize="12" fontFamily="DM Mono, monospace"><text x="150" y="183">MOISTURE</text><text x="367" y="151">RAINFALL</text><text x="574" y="153">MOVEMENT</text></g>
       <path d={movement >= 60 ? "M430 180l-16 14 18 9-12 17" : "M430 180l-8 9 9 6"} fill="none" stroke={unstable ? "#ffb39b" : "#d6c39a"} strokeWidth={movement >= 60 ? 5 : 2} strokeLinecap="round" className="slope-crack"/>
       <path d="M0 228 Q140 205 250 214 Q390 219 480 170 Q600 142 760 184" fill="none" stroke="#d8c092" strokeWidth="2" opacity=".75"/>
       {unstable && <path d="M485 163q30 18 52 42l-18 8q-24-21-42-27" fill="#d9a27c" opacity=".9" className="soil-shift"/>}
+      {risk.tone === "critical" && <path d="M492 157q45 24 70 58l-16 8q-33-24-64-40" fill="#e99b70" opacity=".95" className="soil-shift"/>}
     </svg>
-    <div className="hill-readings"><span><b>{moisture}%</b> Soil moisture</span><span><b>{rainfall}%</b> Rainfall</span><span><b>{movement}%</b> Ground movement</span></div>
-    <p className="hill-caption">{unstable ? "Several warning signals are elevated. The model highlights possible slope instability." : wet ? "Water is entering the slope model. Watch how the indicators respond as conditions change." : "The slope is stable in this simulation. Change a sensor input to explore how warning signals develop."}</p>
+    <div className="hill-readings">{sensorStates.map(s=><span className={s.active ? "reading-active" : ""} key={s.id}><b>{s.value}%</b>{s.label}</span>)}</div>
+    <div className="hill-explanation"><span className="explanation-icon"><Activity size={16}/></span><p>{explanation}</p></div>
+    <div className="hill-steps"><span className={rainfall >= 35 ? "step-active" : ""}>1 <b>Rain adds water</b></span><i>→</i><span className={moisture >= 35 ? "step-active" : ""}>2 <b>Soil gets heavier</b></span><i>→</i><span className={movement >= 35 ? "step-active" : ""}>3 <b>Ground may move</b></span></div>
   </section>;
 }
 
