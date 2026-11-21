@@ -167,6 +167,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .hill-scene{margin:18px 0 30px;padding:20px;border:1px solid #355746;border-radius:16px;background:linear-gradient(145deg,#11271e,#0d1d17);overflow:hidden}
 .hill-scene-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
 .hill-scene-head h3{font:750 18px var(--display);margin:7px 0 0;color:#edf5ee}
+.hill-risk-state{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:6px 11px;border:1px solid #477452;border-radius:999px;background:#142e1d;color:#a8e9b9;font:700 10px var(--mono);letter-spacing:.4px;white-space:nowrap}
+.hill-risk-state.watch{border-color:#8b713e;background:#30291b;color:#f3d18b}
+.hill-risk-state.high{border-color:#965347;background:#38241f;color:#ffad99}
+.hill-risk-state.critical{border:2px solid #ffad99;background:#492b25;color:#fff0e9;font-weight:800}
 .hill-live{display:flex;align-items:center;gap:8px;color:#9bc9a8;font:9px var(--mono);letter-spacing:1px}
 .hill-live .dot{width:7px;height:7px}
 .hill-illustration{display:block;width:100%;height:auto;max-height:310px;border-radius:12px;overflow:hidden}
@@ -194,9 +198,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .hill-readings span{transition:background .25s,border-color .25s}
 .hill-readings span.reading-active{background:#2d3023;border-color:#8b7448}
 .hill-readings span.reading-active b{color:#ffd28a}
-.hill-explanation{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;margin-top:12px;border-radius:10px;background:rgba(6,17,13,.42);border:1px solid rgba(125,166,132,.22)}
-.explanation-icon{display:grid;place-items:center;flex:0 0 28px;height:28px;border-radius:8px;background:#203d2e;color:#b8ebc8}
-.hill-explanation p{margin:2px 0 0;color:#c3d8c8;font-size:12px;line-height:1.55}
+.hill-explanation{display:flex;align-items:flex-start;gap:11px;padding:12px 14px;margin-top:12px;border-radius:10px;background:rgba(6,17,13,.42);border:1px solid rgba(125,166,132,.22)}
+.theva-guide-mark{display:grid;place-items:center;flex:0 0 32px;height:32px;border-radius:11px;background:linear-gradient(145deg,#c9f0d0,#92d8a9);color:#10271a;font:800 17px var(--display);box-shadow:0 0 0 3px #a8e9b91c}
+.theva-guide-copy{min-width:0}
+.theva-guide-copy>b{display:block;color:#a8e9b9;font:700 10px var(--mono);letter-spacing:.7px;text-transform:uppercase}
+.hill-explanation p{margin:4px 0 0;color:#c3d8c8;font-size:12px;line-height:1.55;overflow-wrap:anywhere}
 .hill-steps{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:12px;margin-top:12px;border-top:1px solid rgba(125,166,132,.18)}
 .hill-steps span{display:flex;align-items:center;gap:7px;color:#789686;font:10px var(--mono)}
 .hill-steps span b{font:500 10px var(--sans);color:#9db6a6}
@@ -207,4 +213,5 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .hill-scene.high .hill-explanation,.hill-scene.critical .hill-explanation{border-color:#925341;background:rgba(64,25,19,.25)}
 .hill-scene.high .hill-live,.hill-scene.critical .hill-live{color:#ffb39b}
 @media(max-width:650px){.hill-steps{gap:4px}.hill-steps span{gap:4px;font-size:9px}.hill-steps span b{font-size:9px}.hill-steps i{font-size:10px}}
+@media(max-width:420px){.hill-scene-head{align-items:flex-start}.hill-risk-state{font-size:9px;padding:5px 8px;min-height:29px}.hill-explanation{padding:11px}.theva-guide-mark{flex-basis:29px;height:29px}.theva-guide-copy p{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.hill-marker.active .marker-halo,.rain-lines.active,.soil-shift{animation:none}}

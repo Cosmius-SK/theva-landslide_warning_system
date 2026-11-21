@@ -12,10 +12,10 @@ function assess(values) {
   const high = values.filter(v => v >= 60).length;
   const critical = values.filter(v => v >= 80).length;
   if (values.length === 0) return { level: "Unavailable", tone: "watch", message: "No healthy sensor inputs are available. The system cannot assess the simulated slope." };
-  if (critical >= 2) return { level: "Evacuation", tone: "critical", message: "Multiple indicators are critical. Evacuate the demonstration zone." };
-  if (critical >= 1 || high >= 2) return { level: "High", tone: "high", message: "High-risk conditions detected. Take precautionary action." };
-  if (values.some(v => v >= 35)) return { level: "Watch", tone: "watch", message: "Conditions are changing. Continue monitoring the slope." };
-  return { level: "Safe", tone: "safe", message: "No warning threshold is currently crossed in this simulation." };
+  if (critical >= 2) return { level: "Evacuation", tone: "critical", message: "The model's highest alert is on. Pause the demonstration and ask the grown-up leading it what happens next." };
+  if (critical >= 1 || high >= 2) return { level: "High", tone: "high", message: "Several signals are high. The model is showing a big change in the slope." };
+  if (values.some(v => v >= 35)) return { level: "Watch", tone: "watch", message: "A reading is rising. Let's keep watching how the slope model changes." };
+  return { level: "Safe", tone: "safe", message: "The slope model is calm right now. Try changing a sensor to see what happens." };
 }
 
 function HillScene({ sensors, risk, audience = false }) {
@@ -30,16 +30,16 @@ function HillScene({ sensors, risk, audience = false }) {
     { id: "movement", label: "Ground movement", value: movement, active: movement >= 35 }
   ];
   const explanation = risk.tone === "critical"
-    ? "Two or more signals have reached critical levels in this demonstration. The model shows an evacuation-level alert."
+    ? "The model's highest alert is on. Let's pause our demonstration and ask our teacher what to do next."
     : unstable
-      ? "One signal is critical, or several are high. The slope model is showing strong signs of instability."
+      ? "Some readings are very high, so the model shows the slope changing a lot."
       : wet
-        ? "Rain and moisture are increasing the water in the slope. Watch for ground movement as the soil becomes heavier."
+        ? "Rain is soaking into the soil. Wet soil can get heavier, so let's keep watching."
         : movement >= 35
-          ? "The ground movement signal is rising. The model is watching for changes in slope stability."
-          : "The model is currently stable. Increase a sensor reading to see how rain, soil moisture, and movement affect the warning.";
+          ? "The ground movement number is going up. Let's watch what happens to the slope."
+          : "The slope model is calm right now. Try raising a sensor to see how the model changes.";
   return <section className={"hill-scene " + risk.tone + (audience ? " audience-hill" : "")} aria-label="Illustration of slope conditions">
-    <div className="hill-scene-head"><div><span className="card-kicker">LIVE SLOPE MODEL</span><h3>{risk.tone === "critical" ? "Critical slope conditions" : unstable ? "Slope under stress" : wet ? "Water entering the slope" : "Slope conditions"}</h3></div><span className="hill-live"><i className="dot online"/> LIVE MODEL</span></div>
+    <div className="hill-scene-head"><div><span className="card-kicker">LIVE SLOPE MODEL</span><h3>{risk.level === "Evacuation" ? "Evacuation alert in model" : unstable ? "Slope under stress" : wet ? "Water entering the slope" : "Slope conditions"}</h3></div><span className={"hill-risk-state " + risk.tone}>{risk.level === "Evacuation" ? "⚠ " : ""}{risk.level}</span></div>
     <svg className="hill-illustration" viewBox="0 0 760 300" role="img" aria-label={`Illustrated hillside. Soil moisture ${moisture}, rainfall ${rainfall}, ground movement ${movement}. Risk: ${risk.level}.`}>
       <defs><linearGradient id="hillSky" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#183c43"/><stop offset="1" stopColor="#6f9b82"/></linearGradient><linearGradient id="hillSoil" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#9b8058"/><stop offset="1" stopColor="#4b4936"/></linearGradient></defs>
       <rect width="760" height="300" rx="16" fill="url(#hillSky)"/>
@@ -57,7 +57,7 @@ function HillScene({ sensors, risk, audience = false }) {
       {risk.tone === "critical" && <path d="M492 157q45 24 70 58l-16 8q-33-24-64-40" fill="#e99b70" opacity=".95" className="soil-shift"/>}
     </svg>
     <div className="hill-readings">{sensorStates.map(s=><span className={s.active ? "reading-active" : ""} key={s.id}><b>{s.value}%</b>{s.label}</span>)}</div>
-    <div className="hill-explanation"><span className="explanation-icon"><Activity size={16}/></span><p>{explanation}</p></div>
+    <div className="hill-explanation"><span className="theva-guide-mark" aria-hidden="true">T</span><div className="theva-guide-copy"><b>Theva says</b><p>{explanation}</p></div></div>
     <div className="hill-steps"><span className={rainfall >= 35 ? "step-active" : ""}>1 <b>Rain adds water</b></span><i>→</i><span className={moisture >= 35 ? "step-active" : ""}>2 <b>Soil gets heavier</b></span><i>→</i><span className={movement >= 35 ? "step-active" : ""}>3 <b>Ground may move</b></span></div>
   </section>;
 }
