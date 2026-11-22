@@ -1,0 +1,37 @@
+# Dependencies and generated package files
+node_modules/
+
+# Build output and caches
+dist/
+build/
+coverage/
+.vite/
+.cache/
+.vercel/
+
+# Local environment configuration (keep the example file trackable)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs and temporary artifacts
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+*.tmp
+*.temp
+*.swp
+*.swo
+*.pid
+*.seed
+*.tsbuildinfo
+*.tgz
+tmp/
+temp/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
