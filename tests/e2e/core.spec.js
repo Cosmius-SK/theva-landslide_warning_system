@@ -116,10 +116,11 @@ test("operator, audience sessions, scene sync, feedback, and six viewport layout
   await expect(audiencePage.locator(".audience-risk h2")).toHaveText("Watch", { timeout: 10_000 });
   await expect(audiencePage.locator(".audience-hill .scene-current")).toHaveText("Soil close-up", { timeout: 10_000 });
 
-  await audiencePage.route("**/api/audience-session", route => route.abort());
+  await audiencePage.route("**/api/audience-session", route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Audience session service unavailable." }) }));
   await expect(audiencePage.locator(".audience-session-meta")).toContainText("offline", { timeout: 10_000 });
   await expect(audiencePage.locator(".audience-risk h2")).toHaveText("Watch");
   await audiencePage.unroute("**/api/audience-session");
+  await audiencePage.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(audiencePage.locator(".audience-session-meta")).toContainText("Cloud connected", { timeout: 10_000 });
 
   await audiencePage.getByRole("button", { name: "Share feedback" }).click();

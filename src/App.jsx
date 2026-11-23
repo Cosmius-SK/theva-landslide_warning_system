@@ -5,6 +5,7 @@ import { realtimeEnabled, supabase } from "./lib/supabase";
 import { assess } from "./lib/risk";
 import { normalizeScene, SCENE_VIEWS, sceneImagePath } from "./lib/scenes";
 import { isCurrentOrNewerUpdate } from "./lib/shared-state";
+import { apiFetch } from "./lib/api-fetch";
 
 const initialSensors = [
   { id: "moisture", name: "Soil moisture", unit: "Moisture", value: 22, icon: Droplets, description: "Water saturation in the slope" },
@@ -158,13 +159,14 @@ export default function App() {
     setSharedUpdatedAt(updatedAt || null);
   }
 
-  // Load shared state and subscribe to Supabase database changes.
+  // Operators load the initial snapshot. Audience sessions get their snapshot
+  // from the server-side token validation below, then use Realtime plus fallback polling.
   useEffect(() => {
     let channel;
     let mounted = true;
     async function loadState() {
       try {
-        const response = await fetch("/api/state", { cache: "no-store" });
+        const response = await apiFetch("/api/state", { cache: "no-store" });
         if (!response.ok) throw new Error("Shared state API unavailable");
         const data = await response.json();
         if (mounted) {
@@ -173,7 +175,7 @@ export default function App() {
         }
       } catch { if (mounted) setSyncStatus("offline"); }
     }
-    loadState();
+    if (page === "operator") loadState();
     if (supabase) {
       channel = supabase.channel("theva-demo-state")
         .on("postgres_changes", { event: "*", schema: "public", table: "demo_state", filter: "id=eq.1" }, payload => {
@@ -189,7 +191,7 @@ export default function App() {
         });
     } else setSyncStatus("not-configured");
     return () => { mounted = false; if (channel && supabase) supabase.removeChannel(channel); };
-  }, []);
+  }, [page]);
 
   // A signed-in audience link is only admitted after the server validates its bearer token.
   useEffect(() => {
@@ -201,7 +203,7 @@ export default function App() {
         return;
       }
       try {
-        const response = await fetch("/api/audience-session", {
+        const response = await apiFetch("/api/audience-session", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "validate", token: audienceToken }), cache: "no-store"
         });
@@ -247,27 +249,35 @@ export default function App() {
     if (page !== "audience" || !audienceToken) return;
     let stopped = false;
     let inFlight = false;
+    let pollTimer;
+    let pollDelay = 5_000;
     async function refreshSharedState() {
       if (stopped || inFlight || document.visibilityState === "hidden") return;
       inFlight = true;
       try {
-        const response = await fetch("/api/audience-session", {
+        const response = await apiFetch("/api/audience-session", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "validate", token: audienceToken }), cache: "no-store"
         });
         const data = await readJsonResponse(response);
-        if (!response.ok || !data.active) {
+        if ([401, 410].includes(response.status) || (response.ok && !data.active)) {
           if (!stopped) returnToWelcome("This audience session has ended. Ask the operator for a new link.");
           return;
         }
+        if (!response.ok) throw new Error("Audience session service unavailable");
         if (!stopped) {
           acceptSharedState(data.state || null, data.updatedAt || null);
           setSyncStatus("connected");
+          pollDelay = 5_000;
         }
       } catch {
-        if (!stopped) setSyncStatus("offline");
+        if (!stopped) {
+          setSyncStatus("offline");
+          pollDelay = Math.min(30_000, Math.max(2_000, pollDelay * 2));
+        }
       } finally {
         inFlight = false;
+        if (!stopped) pollTimer = window.setTimeout(refreshSharedState, pollDelay);
       }
     }
     const onVisibility = () => { if (document.visibilityState === "visible") refreshSharedState(); };
@@ -275,10 +285,10 @@ export default function App() {
     window.addEventListener("online", refreshSharedState);
     document.addEventListener("visibilitychange", onVisibility);
     refreshSharedState();
-    const timer = window.setInterval(refreshSharedState, 2000);
+    pollTimer = window.setTimeout(refreshSharedState, pollDelay);
     return () => {
       stopped = true;
-      window.clearInterval(timer);
+      window.clearTimeout(pollTimer);
       window.removeEventListener("focus", refreshSharedState);
       window.removeEventListener("online", refreshSharedState);
       document.removeEventListener("visibilitychange", onVisibility);
@@ -290,7 +300,7 @@ export default function App() {
     if (!operatorToken || lockStatus !== "active") return;
     async function renewLock() {
       try {
-        const response = await fetch("/api/operator-lock", {
+        const response = await apiFetch("/api/operator-lock", {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
           body: JSON.stringify({ action: "renew", ownerId: operatorOwnerId })
@@ -304,7 +314,7 @@ export default function App() {
     }
     const timer = window.setInterval(renewLock, 10000);
     const releaseOnClose = () => {
-      fetch("/api/operator-lock", {
+      apiFetch("/api/operator-lock", {
         method: "POST", keepalive: true,
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
         body: JSON.stringify({ action: "release", ownerId: operatorOwnerId })
@@ -319,7 +329,7 @@ export default function App() {
     if (!candidate) { setLockError("Enter the operator access token first."); return; }
     setLockError("");
     try {
-      const response = await fetch("/api/operator-lock", {
+      const response = await apiFetch("/api/operator-lock", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + candidate },
         body: JSON.stringify({ action: "acquire", ownerId: operatorOwnerId })
@@ -327,7 +337,7 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not acquire operator lock.");
       // Restore the last cloud state before this newly elected operator publishes.
-      const snapshotResponse = await fetch("/api/state", { cache: "no-store" });
+      const snapshotResponse = await apiFetch("/api/state", { cache: "no-store" });
       if (!snapshotResponse.ok) throw new Error("Operator lock acquired, but the latest shared state could not be loaded. Try connecting again.");
       const snapshot = await snapshotResponse.json();
       if (snapshot.state) {
@@ -345,7 +355,7 @@ export default function App() {
         acceptSharedState(saved, snapshot.updatedAt);
       }
       try {
-        const sessionResponse = await fetch("/api/audience-session", {
+        const sessionResponse = await apiFetch("/api/audience-session", {
           method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + candidate },
           body: JSON.stringify({ action: "status", ownerId: operatorOwnerId }), cache: "no-store"
         });
@@ -381,7 +391,7 @@ export default function App() {
           espOnline, source: activeSource, mode, scene,
           publishedAt: new Date().toISOString()
         };
-        const response = await fetch("/api/state", {
+        const response = await apiFetch("/api/state", {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
           body: JSON.stringify({ state, ownerId: operatorOwnerId })
@@ -402,7 +412,7 @@ export default function App() {
     let stopped = false;
     async function loadFeedback() {
       try {
-        const response = await fetch("/api/feedback", {
+        const response = await apiFetch("/api/feedback", {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
           body: JSON.stringify({ action: "list", ownerId: operatorOwnerId }),
@@ -452,7 +462,7 @@ export default function App() {
   }
 
   async function operatorSessionRequest(action) {
-    const response = await fetch("/api/audience-session", {
+    const response = await apiFetch("/api/audience-session", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
       body: JSON.stringify({ action, ownerId: operatorOwnerId }),
@@ -529,7 +539,7 @@ export default function App() {
     e.preventDefault();
     setFeedbackError("");
     try {
-      const response = await fetch("/api/feedback", {
+      const response = await apiFetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "submit", token: audienceToken, rating: Number(rating), learning, comment }),

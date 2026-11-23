@@ -1,9 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseAdmin, redactServerSecrets } from "./supabase-admin.js";
 
 function createAdmin(env) {
-  const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = env;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("Supabase server configuration missing");
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  return createSupabaseAdmin(env);
 }
 
 const ownerIdPattern = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
@@ -30,7 +28,7 @@ export function createOperatorLockHandler({ admin = () => createAdmin(process.en
       if (action === "renew" && !data) return res.status(409).json({ error: "Operator lock was lost. This console is now read-only." });
       return res.status(200).json({ ok: true, active: action !== "release" });
     } catch (error) {
-      console.error("Theva operator lock API:", error.message);
+      console.error("Theva operator lock API failed", { code: error.code || null, message: redactServerSecrets(error.message, env) });
       return res.status(503).json({ error: "Operator lock service unavailable." });
     }
   };

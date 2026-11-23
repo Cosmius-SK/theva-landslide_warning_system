@@ -1,9 +1,8 @@
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseAdmin, redactServerSecrets } from "./supabase-admin.js";
 import { isAudienceSessionActive, tokenMatchesHash } from "./audience-session-utils.js";
 
 function createAdmin(env) {
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("Supabase server configuration missing");
-  return createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  return createSupabaseAdmin(env);
 }
 
 const ownerIdPattern = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
@@ -59,7 +58,7 @@ export function createFeedbackHandler({ admin = () => createAdmin(process.env), 
 
       return res.status(400).json({ error: "Unknown feedback action." });
     } catch (error) {
-      console.error("Theva feedback API:", error.message);
+      console.error("Theva feedback API failed", { code: error.code || null, message: redactServerSecrets(error.message, env) });
       return res.status(503).json({ error: "Feedback service unavailable." });
     }
   };

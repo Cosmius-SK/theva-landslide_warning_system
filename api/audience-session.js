@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseAdmin, redactServerSecrets } from "./supabase-admin.js";
 import {
   AUDIENCE_SESSION_SECONDS,
   createAudienceToken,
@@ -11,8 +11,7 @@ import { validateDemoState } from "../src/lib/contracts.js";
 const ownerIdPattern = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
 
 function createAdmin(env) {
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("Supabase server configuration missing");
-  return createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  return createSupabaseAdmin(env);
 }
 
 export function createAudienceSessionHandler({ admin = () => createAdmin(process.env), env = process.env, now = () => Date.now(), makeToken = createAudienceToken } = {}) {
@@ -81,7 +80,7 @@ export function createAudienceSessionHandler({ admin = () => createAdmin(process
 
       return res.status(400).json({ error: "Unknown audience session action." });
     } catch (error) {
-      console.error("Theva audience session API:", error.message);
+      console.error("Theva audience session API failed", { code: error.code || null, message: redactServerSecrets(error.message, env) });
       return res.status(503).json({ error: "Audience session service unavailable." });
     }
   };

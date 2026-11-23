@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseAdmin, redactServerSecrets } from "./supabase-admin.js";
 import { validateDemoState } from "../src/lib/contracts.js";
 const headers = {
   "Access-Control-Allow-Origin": process.env.APP_ORIGIN || "*",
@@ -7,9 +7,7 @@ const headers = {
   "Cache-Control": "no-store"
 };
 function admin() {
-  const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("Supabase server configuration missing");
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  return createSupabaseAdmin(process.env);
 }
 export function createStateHandler({ admin: createAdmin = admin, env = process.env, now = () => Date.now() } = {}) {
   return async function handler(req, res) {
@@ -46,7 +44,7 @@ export function createStateHandler({ admin: createAdmin = admin, env = process.e
     res.setHeader("Allow","GET, POST, OPTIONS");
     return res.status(405).json({error:"Method not allowed."});
   } catch (e) {
-    console.error("Theva state API:",e.message);
+    console.error("Theva state API failed", { code: e.code || null, message: redactServerSecrets(e.message, env) });
     return res.status(503).json({error:"Shared state service is not configured or temporarily unavailable."});
   }
   };
