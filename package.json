@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test tests/audience-session.test.js tests/contracts.test.js tests/feedback-api.test.js tests/operator-lock-api.test.js tests/risk.test.js tests/scenes.test.js tests/shared-state.test.js tests/state-api.test.js tests/supabase-admin.test.js",
+    "test": "node --test tests/api-fetch.test.js tests/audience-session.test.js tests/contracts.test.js tests/feedback-api.test.js tests/operator-lock-api.test.js tests/risk.test.js tests/scenes.test.js tests/shared-state.test.js tests/state-api.test.js tests/supabase-admin.test.js",
     "test:e2e": "playwright test"
   },
   "dependencies": {
