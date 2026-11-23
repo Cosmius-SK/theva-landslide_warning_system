@@ -5,6 +5,8 @@ node_modules/
 dist/
 build/
 coverage/
+artifacts/
+playwright-report/
 .vite/
 .cache/
 .vercel/

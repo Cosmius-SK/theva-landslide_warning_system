@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
 import { Activity, AlertTriangle, CheckCircle2, CloudRain, Droplets, Gauge, Radio, RotateCcw, ShieldCheck, Signal, WifiOff } from "lucide-react";
 import { realtimeEnabled, supabase } from "./lib/supabase";
 import { assess } from "./lib/risk";
 import { normalizeScene, SCENE_VIEWS, sceneImagePath } from "./lib/scenes";
+import { isCurrentOrNewerUpdate } from "./lib/shared-state";
 
 const initialSensors = [
   { id: "moisture", name: "Soil moisture", unit: "Moisture", value: 22, icon: Droplets, description: "Water saturation in the slope" },
@@ -10,7 +12,15 @@ const initialSensors = [
   { id: "movement", name: "Ground movement", unit: "Movement", value: 12, icon: Activity, description: "Movement detected in the slope model" }
 ];
 
-function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience = false }) {
+async function readJsonResponse(response) {
+  try { return await response.json(); } catch { return {}; }
+}
+
+function getAudienceTokenFromUrl() {
+  return new URLSearchParams(window.location.hash.slice(1)).get("session") || "";
+}
+
+function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience = false, compact = false }) {
   const moisture = Number(sensors.find(s => s.id === "moisture")?.value || 0);
   const rainfall = Number(sensors.find(s => s.id === "rainfall")?.value || 0);
   const movement = Number(sensors.find(s => s.id === "movement")?.value || 0);
@@ -50,7 +60,7 @@ function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience 
                 ? "Rain is falling harder on the hillside. Let's see whether water gathers in the soil."
                 : "A sensor reading is rising. Let's keep watching the hillside together."
           : "The slope model is calm. Let's try raising a sensor and watch the picture change.";
-  return <section className={"hill-scene " + risk.tone + (audience ? " audience-hill" : "")} aria-label="Cinematic hillside simulation of slope conditions">
+  return <section className={"hill-scene " + risk.tone + (audience ? " audience-hill" : compact ? " operator-hill" : "")} aria-label="Cinematic hillside simulation of slope conditions">
     <div className="hill-scene-head"><div><span className="card-kicker">LIVE SLOPE MODEL</span><h3>{risk.level === "Evacuation" ? "Evacuation alert in model" : risk.level === "High" ? "Slope under stress" : wet ? "Water entering the slope" : "Slope conditions"}</h3></div><span className={"hill-risk-state " + risk.tone} role="status" aria-live="polite" aria-atomic="true">{risk.level === "Evacuation" ? "⚠ " : ""}{risk.level}</span></div>
     <div className={`hill-visual ${imageUnavailable ? "image-failed" : ""}`}>
       {!imageUnavailable && <img key={displayedImage} className="hill-visual-image" src={displayedImage} alt={visualDescription} onError={() => setImageError(usingFallback ? fallbackImage : sceneImage)} />}
@@ -88,17 +98,20 @@ function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience 
       </div> : <span className="scene-following">Scene follows the operator</span>}
     </div>
     {usingFallback && <p className="scene-fallback-note" role="status">This scene could not load, so the standard hillside image is shown.</p>}
-    <div className="hill-readings">{sensorStates.map(sensor=><span className={sensor.failed ? "reading-failed" : sensor.active ? "reading-active" : ""} key={sensor.id}><b>{sensor.failed ? "—" : `${sensor.value}%`}</b>{sensor.label}</span>)}</div>
-    <div className="hill-explanation"><span className="theva-guide-mark" aria-hidden="true">T</span><div className="theva-guide-copy"><b>Theva says</b><p>{explanation}</p></div></div>
-    <div className="hill-steps"><span className={rainfall >= 35 ? "step-active" : ""}>1 <b>Rain adds water</b></span><i>→</i><span className={moisture >= 35 ? "step-active" : ""}>2 <b>Soil gets heavier</b></span><i>→</i><span className={movement >= 35 ? "step-active" : ""}>3 <b>Ground may move</b></span></div>
+    {!compact && !audience && <div className="hill-readings">{sensorStates.map(sensor=><span className={sensor.failed ? "reading-failed" : sensor.active ? "reading-active" : ""} key={sensor.id}><b>{sensor.failed ? "—" : `${sensor.value}%`}</b>{sensor.label}</span>)}</div>}
+    {!compact && <div className="hill-explanation"><span className="theva-guide-mark" aria-hidden="true">T</span><div className="theva-guide-copy"><b>Theva says</b><p>{explanation}</p></div></div>}
+    {!compact && <div className="hill-steps"><span className={rainfall >= 35 ? "step-active" : ""}>1 <b>Rain adds water</b></span><i>→</i><span className={moisture >= 35 ? "step-active" : ""}>2 <b>Soil gets heavier</b></span><i>→</i><span className={movement >= 35 ? "step-active" : ""}>3 <b>Ground may move</b></span></div>}
   </section>;
 }
 
 export default function App() {
-  const [page, setPage] = useState(window.location.pathname.startsWith("/operator") ? "operator" : "welcome");
+  const [page, setPage] = useState(() => {
+    if (window.location.pathname.startsWith("/operator")) return "operator";
+    return window.location.pathname === "/audience" && getAudienceTokenFromUrl() ? "audience-loading" : "welcome";
+  });
   const [sensors, setSensors] = useState(initialSensors);
   const [faults, setFaults] = useState([]);
-  const [espOnline, setEspOnline] = useState(true);
+  const [espOnline, setEspOnline] = useState(false);
   const [mode, setMode] = useState("auto");
   const [scene, setScene] = useState("panorama");
   const [virtual, setVirtual] = useState(false);
@@ -107,8 +120,15 @@ export default function App() {
   const [rating, setRating] = useState("5");
   const [learning, setLearning] = useState("Yes");
   const [comment, setComment] = useState("");
-  const [sessionStart, setSessionStart] = useState(Date.now());
+  const [feedbackError, setFeedbackError] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(420);
+  const [audienceToken, setAudienceToken] = useState(getAudienceTokenFromUrl);
+  const [audienceExpiresAt, setAudienceExpiresAt] = useState(null);
+  const [audienceSessionActive, setAudienceSessionActive] = useState(false);
+  const [audienceSessionExpiresAt, setAudienceSessionExpiresAt] = useState(null);
+  const [audienceSessionUrl, setAudienceSessionUrl] = useState("");
+  const [audienceSessionQr, setAudienceSessionQr] = useState("");
+  const [audienceSessionError, setAudienceSessionError] = useState("");
   const [operatorToken, setOperatorToken] = useState("");
   const [operatorOwnerId] = useState(() => crypto.randomUUID());
   const [lockStatus, setLockStatus] = useState("unlocked");
@@ -116,14 +136,27 @@ export default function App() {
   const [tokenInput, setTokenInput] = useState("");
   const [sharedState, setSharedState] = useState(null);
   const [sharedUpdatedAt, setSharedUpdatedAt] = useState(null);
+  const sharedUpdatedAtRef = useRef(null);
+  const [operatorMobileTab, setOperatorMobileTab] = useState("monitor");
   const [syncStatus, setSyncStatus] = useState(realtimeEnabled ? "connecting" : "not-configured");
   const [publishError, setPublishError] = useState("");
 
-  const activeSensors = sensors.map(s => ({ ...s, failed: faults.includes(s.id) || !espOnline }));
+  // This checkout contains no hardware adapter. Auto therefore uses virtual values;
+  // Hardware-only stays visibly unavailable until a real telemetry source is connected.
+  const activeSource = mode === "hardware" ? "hardware-unavailable" : mode === "virtual" ? "virtual" : "virtual-fallback";
+  const activeSensors = sensors.map(s => ({ ...s, failed: mode === "hardware" || faults.includes(s.id) }));
   const values = activeSensors.filter(s => !s.failed).map(s => s.value);
-  const risk = useMemo(() => assess(values), [sensors, faults, espOnline]);
+  const risk = useMemo(() => assess(values), [sensors, faults, mode]);
   const healthy = activeSensors.filter(s => !s.failed).length;
-  const degraded = healthy < 3 || !espOnline;
+  const degraded = healthy < 3 || !espOnline || mode === "hardware";
+
+  function acceptSharedState(nextState, updatedAt) {
+    if (!nextState) return;
+    if (!isCurrentOrNewerUpdate(updatedAt, sharedUpdatedAtRef.current)) return;
+    if (updatedAt) sharedUpdatedAtRef.current = updatedAt;
+    setSharedState(nextState);
+    setSharedUpdatedAt(updatedAt || null);
+  }
 
   // Load shared state and subscribe to Supabase database changes.
   useEffect(() => {
@@ -135,7 +168,7 @@ export default function App() {
         if (!response.ok) throw new Error("Shared state API unavailable");
         const data = await response.json();
         if (mounted) {
-          if (data.state) { setSharedState(data.state); setSharedUpdatedAt(data.updatedAt); }
+          if (data.state) acceptSharedState(data.state, data.updatedAt);
           setSyncStatus("connected");
         }
       } catch { if (mounted) setSyncStatus("offline"); }
@@ -145,8 +178,7 @@ export default function App() {
       channel = supabase.channel("theva-demo-state")
         .on("postgres_changes", { event: "*", schema: "public", table: "demo_state", filter: "id=eq.1" }, payload => {
           if (mounted && payload.new?.state) {
-            setSharedState(payload.new.state);
-            setSharedUpdatedAt(payload.new.updated_at);
+            acceptSharedState(payload.new.state, payload.new.updated_at);
             setSyncStatus("connected");
           }
         })
@@ -159,22 +191,77 @@ export default function App() {
     return () => { mounted = false; if (channel && supabase) supabase.removeChannel(channel); };
   }, []);
 
-  // Audience fallback sync: poll the authoritative API as well as Realtime.
-  // This recovers from missed websocket events, mobile sleep, and reconnects.
+  // A signed-in audience link is only admitted after the server validates its bearer token.
   useEffect(() => {
-    if (page !== "audience") return;
+    if (page !== "audience-loading") return;
+    let stopped = false;
+    async function validateLink() {
+      if (!audienceToken) {
+        returnToWelcome("This audience session link is missing or invalid. Ask the operator for a current link.");
+        return;
+      }
+      try {
+        const response = await fetch("/api/audience-session", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "validate", token: audienceToken }), cache: "no-store"
+        });
+        const data = await readJsonResponse(response);
+        if (stopped) return;
+        if (!response.ok || !data.active || !data.expiresAt) {
+          returnToWelcome(response.status === 410 ? "This audience session has ended. Ask the operator for a new link." : "This audience session link is invalid. Ask the operator for a current link.");
+          return;
+        }
+        acceptSharedState(data.state || null, data.updatedAt || null);
+        setAudienceExpiresAt(data.expiresAt);
+        setSecondsLeft(Math.max(0, Math.ceil((Date.parse(data.expiresAt) - Date.now()) / 1000)));
+        setAudienceSessionError("");
+        setPage("audience");
+      } catch {
+        if (!stopped) returnToWelcome("The audience session could not be verified. Reconnect and try the link again.");
+      }
+    }
+    validateLink();
+    return () => { stopped = true; };
+  }, [page, audienceToken]);
+
+  useEffect(() => {
+    function onAudienceLinkChange() {
+      if (window.location.pathname !== "/audience") return;
+      const nextToken = getAudienceTokenFromUrl();
+      if (!nextToken) {
+        returnToWelcome("This audience session link is missing or invalid. Ask the operator for a current link.");
+        return;
+      }
+      setAudienceSessionError("");
+      setAudienceExpiresAt(null);
+      setAudienceToken(nextToken);
+      setPage("audience-loading");
+    }
+    window.addEventListener("hashchange", onAudienceLinkChange);
+    return () => window.removeEventListener("hashchange", onAudienceLinkChange);
+  }, []);
+
+  // Audience fallback sync: poll the authoritative API as well as Realtime.
+  // Every refresh is authorized against the same server-side session and original expiry.
+  useEffect(() => {
+    if (page !== "audience" || !audienceToken) return;
     let stopped = false;
     let inFlight = false;
     async function refreshSharedState() {
       if (stopped || inFlight || document.visibilityState === "hidden") return;
       inFlight = true;
       try {
-        const response = await fetch("/api/state?refresh=" + Date.now(), { cache: "no-store" });
-        if (!response.ok) throw new Error("Shared state unavailable");
-        const data = await response.json();
-        if (!stopped && data.state) {
-          setSharedState(data.state);
-          setSharedUpdatedAt(data.updatedAt);
+        const response = await fetch("/api/audience-session", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "validate", token: audienceToken }), cache: "no-store"
+        });
+        const data = await readJsonResponse(response);
+        if (!response.ok || !data.active) {
+          if (!stopped) returnToWelcome("This audience session has ended. Ask the operator for a new link.");
+          return;
+        }
+        if (!stopped) {
+          acceptSharedState(data.state || null, data.updatedAt || null);
           setSyncStatus("connected");
         }
       } catch {
@@ -196,7 +283,7 @@ export default function App() {
       window.removeEventListener("online", refreshSharedState);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [page]);
+  }, [page, audienceToken]);
 
   // Keep the server-side operator lease alive while this console is active.
   useEffect(() => {
@@ -255,9 +342,21 @@ export default function App() {
         }
         if (typeof saved.espOnline === "boolean") setEspOnline(saved.espOnline);
         if (saved.mode) setMode(saved.mode);
-        setSharedState(saved);
-        setSharedUpdatedAt(snapshot.updatedAt);
+        acceptSharedState(saved, snapshot.updatedAt);
       }
+      try {
+        const sessionResponse = await fetch("/api/audience-session", {
+          method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + candidate },
+          body: JSON.stringify({ action: "status", ownerId: operatorOwnerId }), cache: "no-store"
+        });
+        const sessionData = await readJsonResponse(sessionResponse);
+        if (sessionResponse.ok) {
+          setAudienceSessionActive(Boolean(sessionData.active));
+          setAudienceSessionExpiresAt(sessionData.expiresAt || null);
+          setAudienceSessionUrl("");
+      setAudienceSessionQr("");
+        }
+      } catch { /* The operator can retry session controls after connecting. */ }
       setOperatorToken(candidate);
       setLockStatus("active");
       setPublishError("");
@@ -277,9 +376,9 @@ export default function App() {
         const state = {
           sensors: sensors.map(sensor => ({
             id: sensor.id, name: sensor.name, value: sensor.value,
-            healthy: !faults.includes(sensor.id) && espOnline
+            healthy: mode !== "hardware" && !faults.includes(sensor.id)
           })),
-          espOnline, source: "operator-simulation", mode, scene,
+          espOnline, source: activeSource, mode, scene,
           publishedAt: new Date().toISOString()
         };
         const response = await fetch("/api/state", {
@@ -292,11 +391,33 @@ export default function App() {
           throw new Error("Could not publish state. Check the API and Supabase configuration.");
         }
         const data = await response.json();
-        setSharedState(data.state); setSharedUpdatedAt(data.updatedAt); setSyncStatus("connected");
+        acceptSharedState(data.state, data.updatedAt); setSyncStatus("connected");
       } catch (error) { setPublishError(error.message); setSyncStatus("offline"); }
     }, 250);
     return () => clearTimeout(timer);
-  }, [page, operatorToken, operatorOwnerId, lockStatus, sensors, faults, espOnline, mode, scene]);
+  }, [page, operatorToken, operatorOwnerId, lockStatus, sensors, faults, espOnline, mode, scene, activeSource]);
+
+  useEffect(() => {
+    if (page !== "feedback-admin" || lockStatus !== "active") return;
+    let stopped = false;
+    async function loadFeedback() {
+      try {
+        const response = await fetch("/api/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
+          body: JSON.stringify({ action: "list", ownerId: operatorOwnerId }),
+          cache: "no-store"
+        });
+        const data = await readJsonResponse(response);
+        if (!response.ok) throw new Error(data.error || "Could not load saved feedback.");
+        if (!stopped) { setFeedback(data.feedback || []); setFeedbackError(""); }
+      } catch (error) {
+        if (!stopped) setFeedbackError(error.message);
+      }
+    }
+    loadFeedback();
+    return () => { stopped = true; };
+  }, [page, lockStatus, operatorToken, operatorOwnerId]);
 
   useEffect(() => {
     const t = setInterval(() => setLastUpdate(new Date()), 5000);
@@ -304,14 +425,79 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (page !== "audience") return;
-    const t = setInterval(() => setSecondsLeft(s => Math.max(0, s - 1)), 1000);
-    return () => clearInterval(t);
-  }, [page, sessionStart]);
+    if (page !== "audience" || !audienceExpiresAt) return;
+    const updateRemaining = () => {
+      const remaining = Math.max(0, Math.ceil((Date.parse(audienceExpiresAt) - Date.now()) / 1000));
+      setSecondsLeft(remaining);
+      if (remaining === 0) returnToWelcome("This audience session has ended. Ask the operator for a new link.");
+    };
+    updateRemaining();
+    const timer = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(timer);
+  }, [page, audienceExpiresAt]);
 
-  useEffect(() => {
-    if (secondsLeft === 0 && page === "audience") setPage("expired");
-  }, [secondsLeft, page]);
+  function returnToWelcome(message = "") {
+    const url = new URL(window.location.href);
+    url.pathname = "/";
+    url.search = "";
+    url.hash = "";
+    window.history.replaceState({}, "", url.pathname);
+    setAudienceToken("");
+    setAudienceExpiresAt(null);
+    setAudienceSessionActive(false);
+    setAudienceSessionUrl("");
+    setAudienceSessionQr("");
+    setAudienceSessionError(message);
+    setPage("welcome");
+  }
+
+  async function operatorSessionRequest(action) {
+    const response = await fetch("/api/audience-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
+      body: JSON.stringify({ action, ownerId: operatorOwnerId }),
+      cache: "no-store"
+    });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || "Could not update the audience session.");
+    return data;
+  }
+
+  async function startAudienceSession() {
+    try {
+      setAudienceSessionQr("");
+      setAudienceSessionError("");
+      const data = await operatorSessionRequest("start");
+      setAudienceSessionActive(true);
+      setAudienceSessionExpiresAt(data.expiresAt);
+      const sessionUrl = `${window.location.origin}/audience#session=${encodeURIComponent(data.token)}`;
+      setAudienceSessionUrl(sessionUrl);
+      try {
+        const qr = await QRCode.toDataURL(sessionUrl, { errorCorrectionLevel: "M", margin: 2, width: 240 });
+        setAudienceSessionQr(qr);
+      } catch { setAudienceSessionError("Session link is ready, but its QR code could not be created. Copy the link instead."); }
+    } catch (error) { setAudienceSessionError(error.message); }
+  }
+
+  async function endAudienceSession() {
+    try {
+      await operatorSessionRequest("end");
+      setAudienceSessionActive(false);
+      setAudienceSessionExpiresAt(null);
+      setAudienceSessionUrl("");
+      setAudienceSessionQr("");
+      setAudienceSessionError("");
+    } catch (error) { setAudienceSessionError(error.message); }
+  }
+
+  async function copyAudienceSessionLink() {
+    try {
+      await navigator.clipboard.writeText(audienceSessionUrl);
+      setAudienceSessionError("Audience link copied.");
+    } catch {
+      setAudienceSessionError("Copy was unavailable. Select and copy the audience link.");
+    }
+  }
 
   function changeValue(id, value) {
     setSensors(prev => prev.map(s => s.id === id ? { ...s, value: Number(value) } : s));
@@ -320,33 +506,52 @@ export default function App() {
   function toggleFault(id) {
     setFaults(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }
-  function resetSystem() {
+  async function resetSystem() {
+    let sessionError = "";
+    if (audienceSessionActive && lockStatus === "active") {
+      try {
+        await operatorSessionRequest("end");
+        setAudienceSessionActive(false);
+        setAudienceSessionExpiresAt(null);
+        setAudienceSessionUrl("");
+        setAudienceSessionQr("");
+      } catch (error) { sessionError = `Demo reset, but its audience session could not be ended: ${error.message}`; }
+    }
     setFaults([]);
     setEspOnline(true);
     setSensors(initialSensors);
+    setMode("auto");
+    setScene("panorama");
     setLastUpdate(new Date());
+    if (sessionError) setAudienceSessionError(sessionError);
   }
-  function startAudience() {
-    setSessionStart(Date.now());
-    setSecondsLeft(420);
-    setPage("audience");
-  }
-  function submitFeedback(e) {
+  async function submitFeedback(e) {
     e.preventDefault();
-    setFeedback(prev => [{ id: crypto.randomUUID(), at: new Date().toISOString(), rating, learning, comment }, ...prev]);
-    setComment("");
-    setPage("thanks");
+    setFeedbackError("");
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "submit", token: audienceToken, rating: Number(rating), learning, comment }),
+        cache: "no-store"
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data.error || "Feedback could not be saved. Please try again.");
+      setFeedback(prev => [data.feedback, ...prev]);
+      setComment("");
+      setPage("thanks");
+    } catch (error) { setFeedbackError(error.message); }
   }
 
   const live = page === "audience";
-  const audienceSensors = sharedState?.sensors?.length ? sharedState.sensors.map(s => ({ ...s, failed: !s.healthy })) : activeSensors;
+  const audienceSensors = sharedState?.sensors?.length ? sharedState.sensors.map(s => ({ ...s, failed: s.healthy !== true })) : activeSensors;
   const audienceValues = audienceSensors.filter(s => !s.failed).map(s => s.value);
   const audienceRisk = assess(audienceValues);
   const audienceScene = normalizeScene(sharedState?.scene || scene);
   const showOperator = page === "operator" || page === "diagnostics" || page === "feedback-admin";
-  const statusLabel = degraded ? "DEGRADED MONITORING" : "SYSTEM HEALTHY";
+  const statusLabel = mode === "hardware" ? "HARDWARE INPUT UNAVAILABLE" : degraded ? "VIRTUAL FALLBACK ACTIVE" : "VIRTUAL MODEL READY";
 
-  return <div className="app-shell">
+  return <div className={"app-shell" + (page === "audience" ? " audience-shell" : page === "operator" ? " operator-shell" : "")}>
     <header className="topbar">
       <a className="brand" href="#" onClick={e => {e.preventDefault(); setPage("operator");}}>
         <span className="brand-mark">T</span><span><b>THEVA LIVE</b><small>LANDSLIDE EARLY WARNING SYSTEM</small></span>
@@ -354,62 +559,91 @@ export default function App() {
       <div className="top-actions"><span className="connection"><i className={"dot " + (syncStatus === "connected" ? "online" : "offline")} />{syncStatus === "connected" ? "CLOUD SYNC" : syncStatus === "not-configured" ? "LOCAL MODE" : "CLOUD OFFLINE"}</span><span className="mode-chip">DEMO BUILD 0.2</span></div>
     </header>
 
-    {showOperator && <div className="workspace">
+    {showOperator && <div className={"workspace" + (page === "operator" ? " operator-workspace" : "")}>
       <aside className="sidebar">
         <div className="side-label">WORKSPACE</div>
         <button className={page === "operator" ? "nav active" : "nav"} onClick={() => setPage("operator")}><Gauge size={17}/> Operator console</button>
         <button className={page === "diagnostics" ? "nav active" : "nav"} onClick={() => setPage("diagnostics")}><Activity size={17}/> Diagnostics</button>
         <button className={page === "feedback-admin" ? "nav active" : "nav"} onClick={() => setPage("feedback-admin")}><ShieldCheck size={17}/> Feedback <span className="nav-count">{feedback.length}</span></button>
-        <div className="side-bottom"><div className="health-mini"><span className="dot online"/> Prototype running</div><small>Local simulation · No cloud link yet</small></div>
+        <div className="side-bottom"><div className="health-mini"><span className={"dot " + (syncStatus === "connected" ? "online" : "offline")}/>{syncStatus === "connected" ? "Cloud connected" : "Cloud not connected"}</div><small>{activeSource === "hardware-unavailable" ? "Hardware-only · no adapter" : activeSource === "virtual-fallback" ? "Automatic · virtual fallback" : "Virtual override"}</small></div>
       </aside>
 
-      <main className="main-content">
+      <main className={"main-content " + (page === "operator" ? `operator-content operator-tab-${operatorMobileTab}` : "")}>
         <div className="page-heading"><div><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>{page === "operator" ? "Operator console" : page === "diagnostics" ? "System diagnostics" : "Audience feedback"}</h1><p>Monitor the slope model and demonstrate how warning indicators respond.</p></div><div className="page-heading-actions">{page === "operator" && <button className="btn secondary" onClick={() => setPage("welcome")}>Preview audience experience ↗</button>}<button className="btn secondary" onClick={resetSystem} disabled={showOperator && lockStatus !== "active"}><RotateCcw size={15}/> Reset system</button></div></div>
 
         {page === "operator" && <>
-          <div className="status-strip"><div className="status-icon"><Radio size={20}/></div><div><b>{statusLabel}</b><small>{degraded ? "One or more inputs are unavailable. Risk and equipment health are assessed separately." : "All three simulated sensor channels are responding."}</small></div><span className="updated">Updated {lastUpdate.toLocaleTimeString()}</span></div>
-          <div className="metrics-grid">
-            <section className={"risk-card " + risk.tone}><div className="card-kicker">CURRENT LANDSLIDE INDICATION</div><div className="risk-main"><div><div className="risk-level">{risk.level}</div><p>{risk.message}</p></div><div className="risk-emblem"><AlertTriangle size={30}/></div></div><div className="risk-foot"><span>DEMO THRESHOLD MODEL</span><span>NOT A REAL FORECAST</span></div></section>
-            <section className="health-card"><div className="card-kicker">SENSOR AVAILABILITY</div><div className="health-number">{healthy}<small> / 3</small></div><div className="health-track"><span style={{width: (healthy/3*100)+"%"}}/></div><p>{healthy === 3 ? "All inputs healthy" : healthy + " of 3 inputs responding"}</p></section>
+          <div className="mobile-console-switch" role="tablist" aria-label="Operator console view">
+            <button id="operator-monitor-tab" role="tab" aria-controls="operator-monitor-panel" aria-selected={operatorMobileTab === "monitor"} onClick={() => setOperatorMobileTab("monitor")}>Monitor</button>
+            <button id="operator-controls-tab" role="tab" aria-controls="operator-controls-panel" aria-selected={operatorMobileTab === "controls"} onClick={() => setOperatorMobileTab("controls")}>Inputs</button>
+            <button id="operator-session-tab" role="tab" aria-controls="operator-controls-panel" aria-selected={operatorMobileTab === "session"} onClick={() => setOperatorMobileTab("session")}>Session</button>
           </div>
-          <HillScene sensors={activeSensors} risk={risk} scene={scene} onSceneChange={lockStatus === "active" ? setScene : undefined} />
-          <div className="section-head"><div><h2>Sensor inputs</h2><p>Adjust the virtual controls or inject a sensor fault.</p></div><span className="pill">SIMULATED INPUTS</span></div>
-          <div className="sensor-grid">{sensors.map(sensor => {
-            const Icon = sensor.icon; const failed = faults.includes(sensor.id) || !espOnline;
-            return <section className={"sensor-card " + (failed ? "failed" : "")} key={sensor.id}>
-              <div className="sensor-top"><div className="sensor-icon"><Icon size={19}/></div><span className={"sensor-state " + (failed ? "bad" : "good")}>{failed ? "FAULT" : "HEALTHY"}</span></div>
-              <h3>{sensor.name}</h3><p>{sensor.description}</p>
-              <div className="slider-row"><input aria-label={sensor.name} type="range" min="0" max="100" value={sensor.value} onChange={e => changeValue(sensor.id, e.target.value)} disabled={failed || lockStatus !== "active"}/><b>{sensor.value}</b></div>
-              <div className="scale"><span>LOW</span><span>HIGH</span></div>
-              <button className={"fault-btn " + (failed ? "restore" : "")} onClick={() => toggleFault(sensor.id)} disabled={lockStatus !== "active"}>{failed ? "Restore sensor" : "Simulate sensor fault"}</button>
-            </section>;
-          })}</div>
-          <div className="section-head"><div><h2>Live audience sync</h2><p>Enter the operator token configured in Vercel. Changes publish automatically to audience devices.</p></div><span className="pill">{syncStatus.toUpperCase()}</span></div>
-          <section className="controls-card"><div className="control-copy"><div className="control-icon"><Radio size={19}/></div><div><b>Single operator access</b><p>{lockStatus === "active" ? "This browser owns the live operator session." : "Only one browser can control and publish the live demonstration at a time."}</p></div></div><input type="password" placeholder="Paste operator token" value={tokenInput} onChange={e => setTokenInput(e.target.value)} /><button className="btn secondary" onClick={connectOperator} disabled={lockStatus === "active"}>{lockStatus === "active" ? "Operator connected" : "Connect operator"}</button></section>
-          {lockError && <p className="disclaimer">{lockError}</p>}
-          {publishError && <p className="disclaimer">{publishError}</p>}
-          <p className="disclaimer">Cloud sync: {syncStatus}. Audience devices receive updates through Supabase Realtime when configured.</p>
-          <div className="section-head"><div><h2>System controls</h2><p>Demonstrate communication failure and fallback behaviour.</p></div></div>
-          <section className="controls-card">
-            <div className="control-copy"><div className="control-icon"><WifiOff size={19}/></div><div><b>ESP32 communication</b><p>Simulate loss of the controller heartbeat.</p></div></div>
-            <button className={espOnline ? "btn secondary" : "btn danger"} onClick={() => setEspOnline(v => !v)} disabled={lockStatus !== "active"}>{espOnline ? "Disconnect ESP32" : "Reconnect ESP32"}</button>
-          </section>
-          <section className="controls-card"><div className="control-copy"><div className="control-icon"><Signal size={19}/></div><div><b>Operating preference</b><p>Automatic prefers healthy hardware; virtual mode is a manual demonstration override.</p></div></div><select value={mode} onChange={e => setMode(e.target.value)} disabled={lockStatus !== "active"}><option value="auto">Automatic</option><option value="virtual">Virtual override</option><option value="hardware">Hardware only</option></select></section>
-          <div className="disclaimer">Educational simulation only. The thresholds are illustrative and are not calibrated for real-world landslide prediction or evacuation decisions.</div>
+          <div className="status-strip"><div className="status-icon"><Radio size={18}/></div><div><b>{statusLabel}</b><small>{mode === "hardware" ? "No ESP32 telemetry adapter is connected. Switch to Automatic or Virtual to continue the simulation." : `${healthy} of 3 simulation channels available · simulated controller heartbeat ${espOnline ? "on" : "off"}.`}</small></div><span className="updated">{syncStatus === "connected" ? "CLOUD SYNC" : syncStatus === "not-configured" ? "LOCAL MODE" : "CLOUD OFFLINE"}</span></div>
+          <div className="operator-live-layout">
+            <section id="operator-monitor-panel" className="operator-monitor-panel" role="tabpanel" aria-labelledby="operator-monitor-tab">
+              <div className="metrics-grid operator-metrics">
+                <section className={"risk-card " + risk.tone}><div className="card-kicker">CURRENT LANDSLIDE INDICATION</div><div className="risk-main"><div><div className="risk-level">{risk.level}</div><p>{risk.message}</p></div><div className="risk-emblem"><AlertTriangle size={25}/></div></div><div className="risk-foot"><span>DEMO MODEL</span><span>NOT A FORECAST</span></div></section>
+                <section className="health-card"><div className="card-kicker">AVAILABLE INPUTS</div><div className="health-number">{healthy}<small> / 3</small></div><div className="health-track"><span style={{width: (healthy/3*100)+"%"}}/></div><p>{healthy === 3 ? "All channels active" : healthy + " channels active"}</p></section>
+              </div>
+              <HillScene sensors={activeSensors} risk={risk} scene={scene} onSceneChange={lockStatus === "active" ? setScene : undefined} compact />
+              <p className="operator-source-note">Input: {mode === "hardware" ? "Hardware only · unavailable" : mode === "virtual" ? "Virtual override" : "Automatic · virtual fallback"} · Scene follows the shared risk state.</p>
+            </section>
+
+            <section id="operator-controls-panel" className="operator-controls-panel" role="tabpanel" aria-labelledby="operator-controls-tab">
+              <div className="section-head compact-section-head"><div><h2>Sensor inputs</h2><p>Adjust values or test a channel fault.</p></div><span className="pill">{mode === "hardware" ? "NO DEVICE" : "SIMULATION"}</span></div>
+              <div className="sensor-grid">{sensors.map(sensor => {
+                const Icon = sensor.icon; const simulatedFault = faults.includes(sensor.id); const failed = mode === "hardware" || simulatedFault;
+                return <section className={"sensor-card " + (failed ? "failed" : "")} key={sensor.id}>
+                  <div className="sensor-top"><div className="sensor-icon"><Icon size={16}/></div><span className={"sensor-state " + (failed ? "bad" : "good")}>{mode === "hardware" ? "UNAVAILABLE" : simulatedFault ? "FAULT" : "HEALTHY"}</span></div>
+                  <h3>{sensor.name}</h3>
+                  <div className="slider-row"><input aria-label={sensor.name} type="range" min="0" max="100" value={sensor.value} onChange={e => changeValue(sensor.id, e.target.value)} disabled={failed || lockStatus !== "active"}/><b>{failed ? "—" : sensor.value}</b></div>
+                  <button className={"fault-btn " + (simulatedFault ? "restore" : "")} onClick={() => toggleFault(sensor.id)} disabled={lockStatus !== "active" || mode === "hardware"}>{mode === "hardware" ? "Switch input mode to resume" : simulatedFault ? "Restore sensor" : "Simulate sensor fault"}</button>
+                </section>;
+              })}</div>
+
+              <div className="operator-quick-controls">
+                <label><span>Operating mode</span><select value={mode} onChange={e => setMode(e.target.value)} disabled={lockStatus !== "active"}><option value="auto">Automatic fallback</option><option value="virtual">Virtual override</option><option value="hardware">Hardware only</option></select></label>
+                <div className="heartbeat-control"><div><b>Controller heartbeat</b><small>Simulation only · no ESP32 connected</small></div><button className="btn secondary" onClick={() => setEspOnline(v => !v)} disabled={lockStatus !== "active"}>{espOnline ? "Set offline" : "Set online"}</button></div>
+              </div>
+
+              <div className="operator-access-card">
+                <div className="operator-access-row"><div><b>Operator connection</b><small>{lockStatus === "active" ? "This browser owns the control lock." : "Connect to enable sensor and session controls."}</small></div>{lockStatus !== "active" && <><input type="password" aria-label="Operator access token" placeholder="Operator token" value={tokenInput} onChange={e => setTokenInput(e.target.value)} /><button className="btn secondary" onClick={connectOperator}>Connect</button></>}</div>
+                {lockError && <p className="session-message" role="status">{lockError}</p>}
+                {publishError && <p className="session-message" role="status">{publishError}</p>}
+                <div className="audience-session-card">
+                  <div className="operator-access-row"><div><b>Audience session</b><small>{audienceSessionActive ? `Active until ${audienceSessionExpiresAt ? new Date(audienceSessionExpiresAt).toLocaleTimeString() : "expiry"}.` : "Server-validated · 7 minutes"}</small></div><div className="audience-session-actions"><button className="btn secondary" onClick={startAudienceSession} disabled={lockStatus !== "active"}>{audienceSessionActive ? "Replace link" : "Start session"}</button>{audienceSessionActive && <button className="btn danger" onClick={endAudienceSession} disabled={lockStatus !== "active"}>End</button>}</div></div>
+                  {audienceSessionActive && audienceSessionUrl && <div className="audience-session-link"><input aria-label="Audience session link" value={audienceSessionUrl} readOnly onFocus={e => e.target.select()} /><button className="btn secondary" onClick={copyAudienceSessionLink}>Copy</button>{audienceSessionQr && <img className="audience-session-qr" src={audienceSessionQr} alt="QR code for the active audience session" />}</div>}
+                  {audienceSessionActive && !audienceSessionUrl && <small className="session-link-note">Link hidden after reconnect. Replace it to issue a new link.</small>}
+                  {audienceSessionError && <p className="session-message" role="status">{audienceSessionError}</p>}
+                </div>
+              </div>
+            </section>
+          </div>
         </>}
 
-        {page === "diagnostics" && <><div className="diagnostic-grid"><section className="health-card"><div className="card-kicker">CONTROLLER</div><h2>{espOnline ? "Connected (simulated)" : "No heartbeat"}</h2><p>{espOnline ? "The prototype is simulating an active ESP32 link." : "Controller link is unavailable. Hardware readings must not be treated as current."}</p></section><section className="health-card"><div className="card-kicker">DATA FRESHNESS</div><h2>{lastUpdate.toLocaleTimeString()}</h2><p>Local prototype timestamp. Cloud freshness monitoring is not connected yet.</p></section></div><div className="section-head"><div><h2>Channel diagnostics</h2><p>Sensor status is independent of the landslide risk indication.</p></div></div><div className="diag-list">{activeSensors.map(s => <div className="diag-row" key={s.id}><span className={"dot " + (s.failed ? "offline" : "online")}/><b>{s.name}</b><span>{s.failed ? "No response" : "Responding"}</span><small>{s.failed ? "Input excluded from healthy-channel count" : "Simulation channel available"}</small></div>)}</div></>}
-        {page === "feedback-admin" && <><div className="section-head"><div><h2>Feedback submissions</h2><p>{feedback.length} submissions stored in this browser session.</p></div><button className="btn secondary" onClick={() => {const csv = ["id,timestamp,rating,learned,comment", ...feedback.map(f => [f.id,f.at,f.rating,f.learning,JSON.stringify(f.comment)].join(","))].join("\n"); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download="theva-feedback.csv"; a.click(); URL.revokeObjectURL(a.href);}}>Export CSV</button></div>{feedback.length ? feedback.map(f => <div className="feedback-row" key={f.id}><b>{f.rating}/5 · Learned: {f.learning}</b><small>{new Date(f.at).toLocaleString()}</small><p>{f.comment || "No comment"}</p></div>) : <div className="empty-state">No feedback received yet.</div>}<p className="disclaimer">Prototype limitation: feedback currently remains in this browser only. Persistent cloud storage and protected admin access are planned next.</p></>}
+        {page === "diagnostics" && <><div className="diagnostic-grid"><section className="health-card"><div className="card-kicker">HARDWARE ADAPTER</div><h2>Not connected</h2><p>No ESP32 firmware or telemetry adapter is present in this checkout. The heartbeat control is a simulation only.</p></section><section className="health-card"><div className="card-kicker">INPUT SOURCE</div><h2>{mode === "hardware" ? "Unavailable" : mode === "virtual" ? "Virtual override" : "Automatic · virtual fallback"}</h2><p>{mode === "hardware" ? "Hardware-only mode correctly reports no usable readings." : "Illustrative virtual readings are currently used."}</p></section><section className="health-card"><div className="card-kicker">CLOUD / REALTIME</div><h2>{syncStatus.toUpperCase()}</h2><p>Last shared-state update: {sharedUpdatedAt ? new Date(sharedUpdatedAt).toLocaleString() : "No cloud update received"}.</p></section></div><div className="section-head"><div><h2>Channel diagnostics</h2><p>Sensor faults and environmental risk are reported separately.</p></div></div><div className="diag-list">{activeSensors.map(s => <div className="diag-row" key={s.id}><span className={"dot " + (s.failed ? "offline" : "online")}/><b>{s.name}</b><span>{s.failed ? mode === "hardware" ? "Unavailable" : "Simulated fault" : "Simulation input"}</span><small>{s.failed ? "Excluded from the risk calculation" : "Available virtual channel"}</small></div>)}</div>{publishError && <p className="disclaimer">{publishError}</p>}</>}
+        {page === "feedback-admin" && <><div className="section-head"><div><h2>Feedback submissions</h2><p>{lockStatus === "active" ? `${feedback.length} persistent submissions loaded.` : "Connect the active operator console to review saved feedback."}</p></div>{lockStatus === "active" && <button className="btn secondary" onClick={() => {const csv = ["id,timestamp,rating,learned,comment", ...feedback.map(f => [f.id,f.created_at,f.rating,f.learning,JSON.stringify(f.comment)].join(","))].join("\n"); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download="theva-feedback.csv"; a.click(); URL.revokeObjectURL(a.href);}}>Export CSV</button>}</div>{feedbackError && <p className="session-message" role="status">{feedbackError}</p>}{lockStatus === "active" && (feedback.length ? feedback.map(f => <div className="feedback-row" key={f.id}><b>{f.rating}/5 · Learned: {f.learning}</b><small>{new Date(f.created_at).toLocaleString()}</small><p>{f.comment || "No comment"}</p></div>) : <div className="empty-state">No feedback received yet.</div>)}</>}
       </main>
     </div>}
 
-    {page === "audience" && <main className="audience-page"><div className="audience-top"><span className="pill live-pill"><i className="dot online"/> LIVE DEMONSTRATION</span><span className="timer">SESSION ENDS IN {Math.floor(secondsLeft/60)}:{String(secondsLeft%60).padStart(2,"0")}</span></div><div className="audience-title"><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>Landslide Early Warning System</h1><p>Watch how changing slope conditions can trigger an early warning.</p></div><HillScene sensors={audienceSensors} risk={audienceRisk} scene={audienceScene} audience /><div className={"audience-risk " + audienceRisk.tone}><span>CURRENT INDICATION</span><h2>{audienceRisk.level}</h2><p>{audienceRisk.message}</p></div><div className="audience-sensors">{audienceSensors.map(s => <div className="audience-sensor" key={s.id}><span className={"dot " + (s.failed ? "offline" : "online")}/><b>{s.name}</b><small>{s.failed ? "Sensor unavailable" : "Monitoring active"}</small></div>)}</div><p className="disclaimer">Educational demonstration only. This is not a real landslide warning service.</p><p className="disclaimer">Data: {sharedState ? "Shared live state" : "Local preview"} · {sharedUpdatedAt ? "Updated " + new Date(sharedUpdatedAt).toLocaleTimeString() : "Waiting for operator data"} · Cloud {syncStatus}</p><button className="btn secondary" onClick={() => setPage("feedback")}>Share feedback</button></main>}
+    {page === "audience-loading" && <main className="form-page centered" aria-live="polite"><div className="eyebrow">CHECKING SESSION LINK</div><h1>Getting the live demonstration ready…</h1><p>The session link is being checked with the operator.</p></main>}
+    {page === "audience" && <main className="audience-page">
+      <div className="audience-top"><span className="pill live-pill"><i className="dot online"/> LIVE DEMONSTRATION</span><span className="timer">SESSION ENDS IN {Math.floor(secondsLeft/60)}:{String(secondsLeft%60).padStart(2,"0")}</span></div>
+      <div className="audience-title"><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>Small signals. Safer slopes.</h1><p>Watch rain and ground changes affect the hillside model.</p></div>
+      <HillScene sensors={audienceSensors} risk={audienceRisk} scene={audienceScene} audience />
+      <aside className="audience-summary">
+        <div className={"audience-risk " + audienceRisk.tone}><span>CURRENT MODEL INDICATION</span><h2>{audienceRisk.level}</h2><p>{audienceRisk.message}</p>{audienceSensors.some(s => s.failed) && <small>One or more sensors are unavailable. Other healthy readings still help the model.</small>}</div>
+        <div className="audience-sensors">{audienceSensors.map(s => <div className={"audience-sensor " + (s.failed ? "failed" : "")} key={s.id}><span className={"dot " + (s.failed ? "offline" : "online")}/><b>{s.name}</b><strong>{s.failed ? "—" : `${s.value}%`}</strong><small>{s.failed ? "Sensor unavailable" : "Monitoring active"}</small></div>)}</div>
+        <div className="audience-session-meta"><span>{sharedState?.source === "hardware" ? "Hardware readings" : sharedState?.source === "virtual" ? "Virtual simulation" : "Automatic virtual fallback"}</span><span>{sharedUpdatedAt ? "Updated " + new Date(sharedUpdatedAt).toLocaleTimeString() : "Waiting for operator data"}</span><span>Cloud {syncStatus}</span></div>
+        <p className="disclaimer">Educational demonstration only. This is not a real landslide warning service.</p>
+        <button className="btn secondary audience-feedback-button" onClick={() => setPage("feedback")}>Share feedback</button>
+      </aside>
+    </main>}
 
-    {page === "welcome" && <main className="welcome-page"><div className="welcome-art"><div className="mountain m1"/><div className="mountain m2"/><div className="sun"/></div><div className="welcome-content"><div className="eyebrow">A GRADE 2 SCIENCE PROJECT</div><h1>Small signals.<br/><em>Safer slopes.</em></h1><p className="welcome-lead">I'm Theva, and I'm exploring how technology can help detect landslide danger and protect lives.</p><div className="welcome-info"><span><ShieldCheck/> Learn how early warnings work</span><span><Activity/> Explore changing slope conditions</span><span><Radio/> Watch a live demonstration</span></div><button className="btn primary large" onClick={startAudience}>Explore the live demo <span>→</span></button><small className="welcome-note">A learning model · Not a real-world prediction system</small></div></main>}
+    {page === "welcome" && <main className="welcome-page"><div className="welcome-art"><div className="mountain m1"/><div className="mountain m2"/><div className="sun"/></div><div className="welcome-content"><div className="eyebrow">A GRADE 2 SCIENCE PROJECT</div><h1>Small signals.<br/><em>Safer slopes.</em></h1><p className="welcome-lead">I'm Theva, and I'm exploring how technology can help detect landslide danger and protect lives.</p><div className="welcome-info"><span><ShieldCheck/> Learn how early warnings work</span><span><Activity/> Explore changing slope conditions</span><span><Radio/> Watch a live demonstration</span></div>{audienceSessionError && <p className="session-message" role="status">{audienceSessionError}</p>}<p className="welcome-note">Open the active audience session link shared by your operator to start the live demonstration.</p><small className="welcome-note">A learning model · Not a real-world prediction system</small></div></main>}
 
-    {page === "feedback" && <main className="form-page"><button className="text-btn" onClick={() => setPage("audience")}>← Back to live demo</button><div className="eyebrow">THEVA WOULD LOVE YOUR FEEDBACK</div><h1>How was the demonstration?</h1><form onSubmit={submitFeedback}><label>How would you rate the demo?</label><div className="rating-options">{["1","2","3","4","5"].map(n => <button type="button" className={rating===n?"chosen":""} onClick={() => setRating(n)} key={n}>{n}</button>)}</div><label>Did you learn something new?</label><select value={learning} onChange={e => setLearning(e.target.value)}><option>Yes</option><option>A little</option><option>No</option></select><label>Any suggestions? (optional)</label><textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Share a thought..." rows="4"/><button className="btn primary large" type="submit">Submit feedback</button></form></main>}
+    {page === "feedback" && <main className="form-page"><button className="text-btn" onClick={() => setPage("audience")}>← Back to live demo</button><div className="eyebrow">THEVA WOULD LOVE YOUR FEEDBACK</div><h1>How was the demonstration?</h1><form onSubmit={submitFeedback}><fieldset className="rating-fieldset"><legend>How would you rate the demo?</legend><div className="rating-options">{["1","2","3","4","5"].map(n => <button type="button" className={rating===n?"chosen":""} aria-pressed={rating===n} onClick={() => setRating(n)} key={n}>{n}</button>)}</div></fieldset><label htmlFor="feedback-learning">Did you learn something new?</label><select id="feedback-learning" value={learning} onChange={e => setLearning(e.target.value)}><option>Yes</option><option>A little</option><option>No</option></select><label htmlFor="feedback-comment">Any suggestions? (optional)</label><textarea id="feedback-comment" maxLength={1000} value={comment} onChange={e => setComment(e.target.value)} placeholder="Share a thought..." rows="4"/><button className="btn primary large" type="submit">Submit feedback</button>{feedbackError && <p className="session-message" role="alert">{feedbackError}</p>}</form></main>}
     {page === "expired" && <main className="form-page centered"><div className="eyebrow">THANK YOU FOR EXPLORING</div><h1>This demo session has ended.</h1><p>We hope you discovered something new about landslide early warning systems.</p><button className="btn primary large" onClick={() => setPage("welcome")}>Return to welcome page</button><button className="text-btn" onClick={() => setPage("feedback")}>Share feedback</button></main>}
-    {page === "thanks" && <main className="form-page centered"><div className="success-mark"><CheckCircle2 size={34}/></div><h1>Thank you!</h1><p>Your feedback has been recorded in this prototype.</p><button className="btn primary" onClick={() => setPage("welcome")}>Back to welcome page</button></main>}
+    {page === "thanks" && <main className="form-page centered"><div className="success-mark"><CheckCircle2 size={34}/></div><h1>Thank you!</h1><p>Your feedback has been saved.</p><button className="btn primary" onClick={() => setPage("welcome")}>Back to welcome page</button></main>}
 
     <footer className="footer"><span>THEVA LIVE <i>·</i> EDUCATIONAL PROTOTYPE</span><span>Built to learn. Designed to protect.</span></footer>
   </div>;

@@ -19,5 +19,5 @@ export function normalizeScene(scene) {
 export function sceneImagePath(riskLevel, scene) {
   const riskFolder = RISK_FOLDERS[riskLevel] || "safe";
   const sceneView = normalizeScene(scene);
-  return `/images/${riskFolder}/${riskFolder}_${sceneView}.png`;
+  return `/images/${riskFolder}/${riskFolder}_${sceneView}.jpg`;
 }

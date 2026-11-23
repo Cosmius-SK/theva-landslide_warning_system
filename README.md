@@ -1,35 +1,47 @@
 # Theva Live — Landslide Early Warning System
 
-Educational demonstration app. This is not a real landslide warning service.
+Educational exhibition demonstration. This is not a calibrated landslide prediction or real-world warning service.
 
-## Run locally
-Requires Node.js 20+. Run `npm install` then `npm run dev`.
+## Requirements and local setup
 
-## Shared real-time state setup
+Use Node.js 22 or later (`.nvmrc` selects 22 for local version managers; `package.json` requires 22+ for Vercel). Run `npm install`, then `npm test` and `npm run build`.
 
-1. Create a Supabase project.
-2. Run [supabase/schema.sql](supabase/schema.sql) in the Supabase SQL Editor.
-3. In Vercel → Project → Settings → Environment Variables, add the variables in [.env.example](.env.example).
-4. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for the browser client.
-5. Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `OPERATOR_ACCESS_TOKEN` as server-only variables. Never prefix these secrets with `VITE_`.
-6. Redeploy after adding environment variables.
-7. Open `/operator`, enter the operator token, publish a test value. On a second device, start the audience demo and verify it updates.
+`npm run dev` starts the Vite frontend only; it does not run the `/api/*` serverless functions. Use `npx vercel dev` with Vercel project configuration and local environment variables to exercise the deployed API handlers. Do not put server-only keys in `VITE_` variables.
 
-## API
-- `GET /api/state`: public read of current demo state.
-- `POST /api/state`: operator-token protected state update.
-- Supabase Postgres Changes broadcasts row updates to audience browsers.
+## Shared-state and audience-session setup
 
-RLS permits public reads only. Browser clients cannot write to the state table. All writes pass through the Vercel API and are checked against the server-side operator token.
+1. Create or select a **development/preview** Supabase project and confirm its project name before running SQL.
+2. Review the existing schema and follow the preflight and ordered execution steps in [Vercel Preview setup](docs/VERCEL_PREVIEW_SETUP.md). Do not run these scripts against Production.
+3. Configure Preview-scoped values from `.env.example` in Vercel. Keep local, Preview, and Production values separate.
+4. `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are browser-visible and used for Realtime; use a Supabase publishable key as the value (legacy anon keys remain compatible). `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `OPERATOR_ACCESS_TOKEN` are server-only; the service-role variable can hold a Supabase secret key. Never prefix server-only values with `VITE_`.
+5. Open `/operator`, connect with the Preview operator token, then start a seven-minute audience session. The operator can share its link or scan-ready QR code, replace the session, or end it early.
 
-## Current milestone
-This milestone adds shared state and live audience subscription. The seven-minute timer is still client-side; server-enforced sessions, persistent feedback, full operator authentication, and ESP32 telemetry remain later milestones.
+The owner approved a 90-day audience-feedback retention window from submission for Preview. Its cleanup function and daily 03:00 UTC Supabase Cron schedule are documented in [Vercel Preview setup](docs/VERCEL_PREVIEW_SETUP.md); neither has been applied or scheduled. Validate Preview schema and migration results before activating cleanup. Production is excluded.
 
-## Illustrative risk model
-- Evacuation: at least two healthy inputs >= 80
-- High: at least one healthy input >= 80, or at least two healthy inputs >= 60
-- Watch: any healthy input >= 35
-- Safe: otherwise
-- Unavailable: no healthy inputs
+Audience bearer tokens are placed in the URL fragment, validated by the server, and stored only as SHA-256 hashes in Supabase. A refresh reuses the original expiry. Replacing or ending the active session revokes its prior link. Feedback is accepted only during the active session and is listed only to the active operator.
 
-Not calibrated for real-world prediction or emergency decisions.
+## API routes
+
+- `GET /api/state`: public read of the latest demonstration state.
+- `POST /api/state`: validates values and publishes state only for the operator holding the server-side lock.
+- `POST /api/operator-lock`: acquires, renews, or releases the single operator lease.
+- `POST /api/audience-session`: creates, validates, reports, or ends the active audience session.
+- `POST /api/feedback`: accepts feedback from an active audience session or lists it for the locked operator.
+
+Supabase RLS allows public reads of demonstration state only. Browser clients cannot write shared state, session tokens, or feedback. Server writes use the service-role key.
+
+## Risk model and source handling
+
+- **Evacuation:** at least two healthy inputs are >= 80.
+- **High:** at least one healthy input is >= 80, or at least two are >= 60.
+- **Watch:** any healthy input is >= 35.
+- **Safe:** otherwise.
+- **Unavailable:** no healthy inputs.
+
+The UI keeps individual sensor faults separate from environmental risk. Automatic currently selects the virtual fallback because this checkout has no ESP32 telemetry adapter. Virtual override also uses simulated values. Hardware-only correctly reports unavailable inputs until a hardware adapter is implemented. The heartbeat toggle is a simulation control and does not indicate a physical connection.
+
+See [the draft ESP32 integration contract](docs/HARDWARE_INTEGRATION.md) before implementing firmware or an ingestion endpoint. The validator is tested with mock payloads; no physical hardware integration is claimed.
+
+## Tests and limitations
+
+`npm test` covers risk thresholds, state validation, the hardware payload contract, image mappings and dimensions, session lifecycle, feedback authorization, and API handler behavior with in-memory Supabase doubles. Browser tests use the local handler-backed harness; they do not prove connectivity to an external Supabase project. Apply schema changes only to a development or preview database until separately approved.
