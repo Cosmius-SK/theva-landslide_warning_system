@@ -280,6 +280,41 @@ test("public display is read-only, follows shared state, and marks retained data
   expect(mobile.horizontal, `public display horizontal overflow on mobile: ${JSON.stringify(mobile)}`).toBe(true);
 });
 
+test("public display shows authenticated simulated ESP32 telemetry and device offline status", async ({ page }) => {
+  await page.goto("/");
+  const payload = {
+    deviceId: "theva-esp32-01",
+    sequence: 1,
+    sentAt: "",
+    label: "SIMULATED TEST ONLY",
+    readings: { moisture: 22, rainfall: 35, movement: 4 }
+  };
+  const sent = await page.evaluate(async ({ payload, token }) => {
+    const clock = await (await fetch("/__test/now")).json();
+    payload.sentAt = new Date(clock.now).toISOString();
+    const response = await fetch("/api/telemetry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload)
+    });
+    return { status: response.status, body: await response.json() };
+  }, { payload, token: "A".repeat(43) });
+  expect(sent.status).toBe(200);
+  expect(sent.body.accepted).toBe(true);
+
+  await page.goto("/display");
+  const device = page.getByRole("region", { name: "ESP32 device telemetry" });
+  await expect(device.getByText("DEVICE ONLINE")).toBeVisible();
+  await expect(device.getByText("SIMULATED TEST ONLY").first()).toBeVisible();
+  await expect(device.locator(".device-telemetry-meta span").nth(1)).toContainText("Sequence1");
+  await expect(device.getByText("35%", { exact: true })).toBeVisible();
+
+  await page.evaluate(() => fetch("/__test/advance?seconds=46"));
+  await page.reload();
+  await expect(device.getByText("DEVICE OFFLINE")).toBeVisible();
+  await expect(device.getByText("35%", { exact: true })).toBeVisible();
+});
+
 test("operator state changes reach the public display and logout is reflected there", async ({ browser }) => {
   const operatorPage = await browser.newPage({ viewport: { width: 1366, height: 768 } });
   await operatorPage.goto("/operator");

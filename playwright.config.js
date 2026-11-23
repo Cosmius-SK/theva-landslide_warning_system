@@ -12,6 +12,7 @@ const systemBrowser = chromeCandidates.find(candidate => existsSync(candidate));
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  globalTeardown: "./tests/e2e/global-teardown.js",
   fullyParallel: false,
   workers: 1,
   timeout: 90_000,

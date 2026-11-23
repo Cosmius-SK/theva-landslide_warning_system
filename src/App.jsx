@@ -21,6 +21,69 @@ function getAudienceTokenFromUrl() {
   return new URLSearchParams(window.location.hash.slice(1)).get("session") || "";
 }
 
+function useDeviceTelemetry(enabled) {
+  const [deviceTelemetry, setDeviceTelemetry] = useState({ configured: null, telemetry: null, status: "connecting" });
+
+  useEffect(() => {
+    if (!enabled) return;
+    let stopped = false;
+    let timer;
+    let inFlight = false;
+    const poll = async () => {
+      if (stopped || inFlight || document.visibilityState === "hidden") return;
+      inFlight = true;
+      try {
+        const response = await apiFetch("/api/telemetry", { cache: "no-store" }, 8_000);
+        const data = await readJsonResponse(response);
+        if (!response.ok) throw new Error("Device telemetry service unavailable");
+        if (!stopped) setDeviceTelemetry({ configured: data.configured === true, telemetry: data.telemetry || null, status: "connected" });
+      } catch {
+        if (!stopped) setDeviceTelemetry(current => ({ ...current, status: "offline" }));
+      } finally {
+        inFlight = false;
+        if (!stopped) timer = window.setTimeout(poll, 5_000);
+      }
+    };
+    const wake = () => { if (document.visibilityState === "visible") { clearTimeout(timer); poll(); } };
+    window.addEventListener("online", wake);
+    window.addEventListener("focus", wake);
+    document.addEventListener("visibilitychange", wake);
+    poll();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      window.removeEventListener("online", wake);
+      window.removeEventListener("focus", wake);
+      document.removeEventListener("visibilitychange", wake);
+    };
+  }, [enabled]);
+
+  return deviceTelemetry;
+}
+
+function DeviceTelemetryPanel({ deviceTelemetry }) {
+  const telemetry = deviceTelemetry.telemetry;
+  const status = deviceTelemetry.status === "offline" ? "API UNAVAILABLE"
+    : deviceTelemetry.configured === false ? "NOT CONFIGURED"
+      : telemetry?.online ? "DEVICE ONLINE" : telemetry ? "DEVICE OFFLINE" : "WAITING FOR DEVICE";
+  const sensors = [
+    ["moisture", "Soil moisture"],
+    ["rainfall", "Rainfall"],
+    ["movement", "Ground movement"]
+  ];
+
+  return <section className="device-telemetry-card" aria-label="ESP32 device telemetry">
+    <div className="device-telemetry-heading"><div><div className="card-kicker">ESP32 DEVICE TELEMETRY</div><h2>Simulated test feed</h2></div><span className={`device-telemetry-status ${telemetry?.online ? "online" : "offline"}`} role="status"><i className={`dot ${telemetry?.online ? "online" : "offline"}`}/>{status}</span></div>
+    <strong className="simulated-test-label">SIMULATED TEST ONLY</strong>
+    {telemetry ? <>
+      <div className="device-telemetry-readings">{sensors.map(([id, label]) => <article className="device-telemetry-reading" key={id}>
+        <b>{label}</b><strong>{Number.isFinite(telemetry.readings?.[id]) ? `${telemetry.readings[id]}%` : "—"}</strong><small>SIMULATED TEST ONLY</small>
+      </article>)}</div>
+      <div className="device-telemetry-meta"><span><b>Device</b>{telemetry.deviceId}</span><span><b>Sequence</b>{telemetry.sequence}</span><span><b>Last seen</b>{telemetry.receivedAt ? new Date(telemetry.receivedAt).toLocaleString() : "Unknown"}</span></div>
+    </> : <p className="device-telemetry-empty">{deviceTelemetry.configured === false ? "Preview device telemetry is not configured." : "Waiting for the first authenticated ESP32 packet."}</p>}
+  </section>;
+}
+
 function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience = false, compact = false }) {
   const moisture = Number(sensors.find(s => s.id === "moisture")?.value || 0);
   const rainfall = Number(sensors.find(s => s.id === "rainfall")?.value || 0);
@@ -111,6 +174,7 @@ function PublicDisplay() {
   const [operatorConnected, setOperatorConnected] = useState(null);
   const [connection, setConnection] = useState("connecting");
   const updatedAtRef = useRef(null);
+  const deviceTelemetry = useDeviceTelemetry(true);
 
   useEffect(() => {
     let stopped = false;
@@ -207,6 +271,7 @@ function PublicDisplay() {
           <i className={`dot ${sensor.failed ? "offline" : "online"}`}/><div><b>{sensor.name}</b><small>{sensor.failed ? "Unavailable" : "Simulation input · monitoring"}</small></div><strong>{sensor.failed ? "—" : `${sensor.value}%`}</strong>
         </article>)}</div>
         <div className="display-meta"><span><b>Input mode</b>{sourceLabel}</span><span><b>Last update</b>{updatedAt ? new Date(updatedAt).toLocaleString() : "No shared update received"}</span><span><b>Synchronization</b>{connectionText}</span></div>
+        <DeviceTelemetryPanel deviceTelemetry={deviceTelemetry}/>
       </aside>
     </div>
     <footer className="display-disclaimer">EDUCATIONAL SIMULATION – NOT A REAL-WORLD LANDSLIDE WARNING SYSTEM</footer>
@@ -251,9 +316,9 @@ function ThevaApp() {
   const [operatorMobileTab, setOperatorMobileTab] = useState("monitor");
   const [syncStatus, setSyncStatus] = useState(realtimeEnabled ? "connecting" : "not-configured");
   const [publishError, setPublishError] = useState("");
+  const deviceTelemetry = useDeviceTelemetry(page === "operator" || page === "diagnostics");
 
-  // This checkout contains no hardware adapter. Auto therefore uses virtual values;
-  // Hardware-only stays visibly unavailable until a real telemetry source is connected.
+  // The ESP32 test feed is displayed separately; virtual controls and risk inputs stay unchanged.
   const activeSource = mode === "hardware" ? "hardware-unavailable" : mode === "virtual" ? "virtual" : "virtual-fallback";
   const activeSensors = sensors.map(s => ({ ...s, failed: mode === "hardware" || faults.includes(s.id) }));
   const values = activeSensors.filter(s => !s.failed).map(s => s.value);
@@ -907,7 +972,7 @@ function ThevaApp() {
             <button id="operator-controls-tab" role="tab" aria-controls="operator-controls-panel" aria-selected={operatorMobileTab === "controls"} onClick={() => setOperatorMobileTab("controls")}>Inputs</button>
             <button id="operator-session-tab" role="tab" aria-controls="operator-controls-panel" aria-selected={operatorMobileTab === "session"} onClick={() => setOperatorMobileTab("session")}>Session</button>
           </div>
-          <div className="status-strip"><div className="status-icon"><Radio size={18}/></div><div><b>{statusLabel}</b><small>{mode === "hardware" ? "No ESP32 telemetry adapter is connected. Switch to Automatic or Virtual to continue the simulation." : `${healthy} of 3 simulation channels available · simulated controller heartbeat ${espOnline ? "on" : "off"}.`}</small></div><span className="updated">{syncStatus === "connected" ? "CLOUD SYNC" : syncStatus === "not-configured" ? "LOCAL MODE" : "CLOUD OFFLINE"}</span></div>
+          <div className="status-strip"><div className="status-icon"><Radio size={18}/></div><div><b>{statusLabel}</b><small>{mode === "hardware" ? `${deviceTelemetry.telemetry?.online ? "ESP32 device online" : deviceTelemetry.configured === false ? "ESP32 telemetry is not configured" : "ESP32 device offline or waiting for a packet"}. Its simulated test feed is displayed separately; hardware readings do not drive the risk model.` : `${healthy} of 3 simulation channels available · simulated controller heartbeat ${espOnline ? "on" : "off"}.`}</small></div><span className="updated">{syncStatus === "connected" ? "CLOUD SYNC" : syncStatus === "not-configured" ? "LOCAL MODE" : "CLOUD OFFLINE"}</span></div>
           <div className="operator-live-layout">
             <section id="operator-monitor-panel" className="operator-monitor-panel" role="tabpanel" aria-labelledby="operator-monitor-tab">
               <div className="metrics-grid operator-metrics">
@@ -919,7 +984,7 @@ function ThevaApp() {
             </section>
 
             <section id="operator-controls-panel" className="operator-controls-panel" role="tabpanel" aria-labelledby="operator-controls-tab">
-              <div className="section-head compact-section-head"><div><h2>Sensor inputs</h2><p>Adjust values or test a channel fault.</p></div><span className="pill">{mode === "hardware" ? "NO DEVICE" : "SIMULATION"}</span></div>
+              <div className="section-head compact-section-head"><div><h2>Sensor inputs</h2><p>Adjust values or test a channel fault.</p></div><span className="pill">{mode === "hardware" ? "NO MODEL INPUT" : "SIMULATION"}</span></div>
               <div className="sensor-grid">{sensors.map(sensor => {
                 const Icon = sensor.icon; const simulatedFault = faults.includes(sensor.id); const failed = mode === "hardware" || simulatedFault;
                 return <section className={"sensor-card " + (failed ? "failed" : "")} key={sensor.id}>
@@ -932,7 +997,7 @@ function ThevaApp() {
 
               <div className="operator-quick-controls">
                 <label><span>Operating mode</span><select value={mode} onChange={e => setMode(e.target.value)} disabled={lockStatus !== "active"}><option value="auto">Automatic fallback</option><option value="virtual">Virtual override</option><option value="hardware">Hardware only</option></select></label>
-                <div className="heartbeat-control"><div><b>Controller heartbeat</b><small>Simulation only · no ESP32 connected</small></div><button className="btn secondary" onClick={() => setEspOnline(v => !v)} disabled={lockStatus !== "active"}>{espOnline ? "Set offline" : "Set online"}</button></div>
+                <div className="heartbeat-control"><div><b>Virtual controller heartbeat</b><small>Simulation control · separate from the ESP32 device status</small></div><button className="btn secondary" onClick={() => setEspOnline(v => !v)} disabled={lockStatus !== "active"}>{espOnline ? "Set offline" : "Set online"}</button></div>
               </div>
 
               <div className="operator-access-card">
@@ -950,7 +1015,7 @@ function ThevaApp() {
           </div>
         </>}
 
-        {page === "diagnostics" && <><div className="diagnostic-grid"><section className="health-card"><div className="card-kicker">HARDWARE ADAPTER</div><h2>Not connected</h2><p>No ESP32 firmware or telemetry adapter is present in this checkout. The heartbeat control is a simulation only.</p></section><section className="health-card"><div className="card-kicker">INPUT SOURCE</div><h2>{mode === "hardware" ? "Unavailable" : mode === "virtual" ? "Virtual override" : "Automatic · virtual fallback"}</h2><p>{mode === "hardware" ? "Hardware-only mode correctly reports no usable readings." : "Illustrative virtual readings are currently used."}</p></section><section className="health-card"><div className="card-kicker">CLOUD / REALTIME</div><h2>{syncStatus.toUpperCase()}</h2><p>Last shared-state update: {sharedUpdatedAt ? new Date(sharedUpdatedAt).toLocaleString() : "No cloud update received"}.</p></section></div><div className="section-head"><div><h2>Channel diagnostics</h2><p>Sensor faults and environmental risk are reported separately.</p></div></div><div className="diag-list">{activeSensors.map(s => <div className="diag-row" key={s.id}><span className={"dot " + (s.failed ? "offline" : "online")}/><b>{s.name}</b><span>{s.failed ? mode === "hardware" ? "Unavailable" : "Simulated fault" : "Simulation input"}</span><small>{s.failed ? "Excluded from the risk calculation" : "Available virtual channel"}</small></div>)}</div>{publishError && <p className="disclaimer">{publishError}</p>}</>}
+        {page === "diagnostics" && <><DeviceTelemetryPanel deviceTelemetry={deviceTelemetry}/><div className="diagnostic-grid"><section className="health-card"><div className="card-kicker">VIRTUAL CONTROLS</div><h2>Available</h2><p>Operator sliders, virtual mode and automatic fallback continue to use the existing simulated inputs.</p></section><section className="health-card"><div className="card-kicker">INPUT SOURCE</div><h2>{mode === "hardware" ? "Unavailable in risk model" : mode === "virtual" ? "Virtual override" : "Automatic · virtual fallback"}</h2><p>Device telemetry is displayed separately and does not change model readings or risk thresholds.</p></section><section className="health-card"><div className="card-kicker">CLOUD / REALTIME</div><h2>{syncStatus.toUpperCase()}</h2><p>Last shared-state update: {sharedUpdatedAt ? new Date(sharedUpdatedAt).toLocaleString() : "No cloud update received"}.</p></section></div><div className="section-head"><div><h2>Channel diagnostics</h2><p>Virtual sensor faults and environmental risk are reported separately.</p></div></div><div className="diag-list">{activeSensors.map(s => <div className="diag-row" key={s.id}><span className={"dot " + (s.failed ? "offline" : "online")}/><b>{s.name}</b><span>{s.failed ? mode === "hardware" ? "Unavailable" : "Simulated fault" : "Simulation input"}</span><small>{s.failed ? "Excluded from the risk calculation" : "Available virtual channel"}</small></div>)}</div>{publishError && <p className="disclaimer">{publishError}</p>}</>}
         {page === "feedback-admin" && <><div className="section-head"><div><h2>Feedback submissions</h2><p>{lockStatus === "active" ? `${feedback.length} persistent submissions loaded.` : "Connect the active operator console to review saved feedback."}</p></div>{lockStatus === "active" && <button className="btn secondary" onClick={() => {const csv = ["id,timestamp,rating,learned,comment", ...feedback.map(f => [f.id,f.created_at,f.rating,f.learning,JSON.stringify(f.comment)].join(","))].join("\n"); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download="theva-feedback.csv"; a.click(); URL.revokeObjectURL(a.href);}}>Export CSV</button>}</div>{feedbackError && <p className="session-message" role="status">{feedbackError}</p>}{lockStatus === "active" && (feedback.length ? feedback.map(f => <div className="feedback-row" key={f.id}><b>{f.rating}/5 · Learned: {f.learning}</b><small>{new Date(f.created_at).toLocaleString()}</small><p>{f.comment || "No comment"}</p></div>) : <div className="empty-state">No feedback received yet.</div>)}</>}
       </main>
     </div>}

@@ -11,6 +11,9 @@ playwright-report/
 .cache/
 .vercel/
 
+# ESP32 Wi-Fi credentials, device token, API URL, and TLS trust anchor
+/firmware/esp32_simulated_telemetry/secrets.h
+
 # Local environment configuration (keep the example file trackable)
 .env
 .env.*

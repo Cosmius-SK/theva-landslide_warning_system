@@ -38,7 +38,7 @@ export function getSafeSupabaseConfig(env) {
 }
 
 export function redactServerSecrets(message, env = process.env) {
-  return [env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, env.OPERATOR_ACCESS_TOKEN]
+  return [env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, env.OPERATOR_ACCESS_TOKEN, env.TELEMETRY_DEVICE_TOKEN]
     .filter(Boolean)
     .reduce((safe, secret) => safe.split(secret).join("[redacted]"), String(message || "Unknown database error"));
 }

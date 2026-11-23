@@ -38,9 +38,9 @@ Supabase RLS allows public reads of demonstration state only. Browser clients ca
 - **Safe:** otherwise.
 - **Unavailable:** no healthy inputs.
 
-The UI keeps individual sensor faults separate from environmental risk. Automatic currently selects the virtual fallback because this checkout has no ESP32 telemetry adapter. Virtual override also uses simulated values. Hardware-only correctly reports unavailable inputs until a hardware adapter is implemented. The heartbeat toggle is a simulation control and does not indicate a physical connection.
+The UI keeps individual sensor faults separate from environmental risk. Automatic uses the virtual fallback and Virtual override uses simulated values. Hardware-only continues to report unavailable model inputs; the ESP32 test feed is shown separately on `/display` and Diagnostics and does not change risk thresholds or virtual controls. Every device-generated reading is labelled **SIMULATED TEST ONLY**. The operator heartbeat toggle remains a simulation control and does not indicate a physical connection.
 
-See [the draft ESP32 integration contract](docs/HARDWARE_INTEGRATION.md) before implementing firmware or an ingestion endpoint. The validator is tested with mock payloads; no physical hardware integration is claimed.
+See the [ESP32 telemetry contract](docs/HARDWARE_INTEGRATION.md) and [Preview setup and flashing guide](docs/ESP32_TELEMETRY_SETUP.md). Local tests use mocked persistence; physical integration is not claimed until an ESP32 packet appears on the Preview dashboard.
 
 ## Tests and limitations
 

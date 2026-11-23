@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateDemoState, validateHardwarePayload } from "../src/lib/contracts.js";
+import { SIMULATED_TEST_LABEL, validateDemoState, validateDeviceTelemetryPayload, validateHardwarePayload } from "../src/lib/contracts.js";
 
 const validState = {
   sensors: [
@@ -48,4 +48,24 @@ test("validates the documented hardware payload and rejects stale or invalid sam
   assert.equal(validateHardwarePayload({ ...payload, sentAt: new Date(now - 31_000).toISOString() }, { now }).valid, false);
   assert.equal(validateHardwarePayload({ ...payload, readings: payload.readings.map((r, i) => i ? r : { ...r, value: 101 }) }, { now }).valid, false);
   assert.equal(validateHardwarePayload({ ...payload, sequence: -1 }, { now }).valid, false);
+});
+
+test("validates labelled device telemetry and rejects unsafe sequence or readings", () => {
+  const now = Date.parse("2026-11-23T10:00:00.000Z");
+  const payload = {
+    deviceId: "theva-esp32-01",
+    sequence: 1,
+    sentAt: new Date(now).toISOString(),
+    label: SIMULATED_TEST_LABEL,
+    readings: { moisture: 22, rainfall: 35, movement: 4 }
+  };
+  assert.equal(validateDeviceTelemetryPayload(payload, { now }).valid, true);
+  assert.equal(validateDeviceTelemetryPayload({ ...payload, label: "LIVE" }, { now }).valid, false);
+  assert.equal(validateDeviceTelemetryPayload({ ...payload, extra: true }, { now }).valid, false);
+  assert.equal(validateDeviceTelemetryPayload({ ...payload, sequence: 0 }, { now }).valid, false);
+  assert.equal(validateDeviceTelemetryPayload({ ...payload, sequence: Number.MAX_SAFE_INTEGER + 1 }, { now }).valid, false);
+  assert.equal(validateDeviceTelemetryPayload({ ...payload, sentAt: new Date(now - 31_000).toISOString() }, { now }).valid, false);
+  assert.equal(validateDeviceTelemetryPayload({ ...payload, sentAt: "2026-11-23T10:00:00+00:00" }, { now }).valid, false);
+  assert.equal(validateDeviceTelemetryPayload({ ...payload, readings: { ...payload.readings, movement: 101 } }, { now }).valid, false);
+  assert.equal(validateDeviceTelemetryPayload({ ...payload, readings: { ...payload.readings, extra: 0 } }, { now }).valid, false);
 });
