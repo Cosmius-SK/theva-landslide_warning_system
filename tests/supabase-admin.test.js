@@ -75,6 +75,14 @@ test("Supabase requests abort at the configured timeout", async () => {
   assert.equal(controllerSeen.length, 1);
 });
 
+test("diagnostic fetch preserves a successful bodyless 204 response", async () => {
+  const loggedFetch = createDiagnosticFetch(async () => new Response(null, { status: 204 }), getSafeSupabaseConfig(env));
+  const response = await loggedFetch(`${env.SUPABASE_URL}/rest/v1/audience_session?id=eq.1`, { method: "PATCH" });
+  assert.equal(response.status, 204);
+  assert.equal(response.ok, true);
+  assert.equal(await response.text(), "");
+});
+
 test("mismatched JWT project refs are rejected before any PostgREST request", () => {
   const payload = Buffer.from(JSON.stringify({ ref: "other-project", role: "service_role" })).toString("base64url");
   const key = `header.${payload}.signature`;

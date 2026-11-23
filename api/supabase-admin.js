@@ -50,7 +50,9 @@ export function createDiagnosticFetch(fetchImpl, config, timeoutMs = REQUEST_TIM
     try {
       const upstream = await fetchImpl(input, { ...init, signal: controller.signal });
       const body = await upstream.arrayBuffer();
-      const response = new Response(body, { status: upstream.status, statusText: upstream.statusText, headers: upstream.headers });
+      // Fetch forbids a body on 204/205/304 responses, even an empty ArrayBuffer.
+      const responseBody = [204, 205, 304].includes(upstream.status) ? null : body;
+      const response = new Response(responseBody, { status: upstream.status, statusText: upstream.statusText, headers: upstream.headers });
       if (!response.ok) {
         const requestId = response.headers.get("sb-request-id") || response.headers.get("x-request-id") || response.headers.get("cf-ray") || "unavailable";
         let details = {};
