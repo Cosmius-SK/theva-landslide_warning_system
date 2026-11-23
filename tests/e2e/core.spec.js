@@ -35,10 +35,11 @@ test("operator, audience sessions, scene sync, feedback, and six viewport layout
   await page.getByLabel("Operator access token").fill("theva-e2e-operator-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByText("Operator connection")).toBeVisible();
-  await expect(page.getByRole("slider", { name: "Rainfall" })).toBeEnabled();
+  await expect(page.getByRole("slider", { name: "Rainfall" })).toBeDisabled();
+  await expect(page.locator(".status-strip > div b")).toHaveText("AUTOMATIC VIRTUAL FALLBACK");
   await page.reload();
   await expect(page.locator(".operator-access-card > .operator-access-row small").first()).toHaveText("This browser owns the control lock.", { timeout: 15_000 });
-  await expect(page.getByRole("slider", { name: "Rainfall" })).toBeEnabled();
+  await expect(page.getByRole("slider", { name: "Rainfall" })).toBeDisabled();
   const browserStorage = await page.evaluate(() => `${Object.keys(localStorage).join(" ")} ${Object.keys(sessionStorage).join(" ")} ${document.cookie}`);
   expect(browserStorage).not.toContain("theva_operator_session");
   expect(browserStorage).not.toContain("theva-e2e-operator-token");
@@ -57,7 +58,7 @@ test("operator, audience sessions, scene sync, feedback, and six viewport layout
   const operatorStatus = page.locator(".operator-access-card > .operator-access-row small").first();
   await expect(operatorStatus).toHaveText(/Reconnecting to the operator lock/, { timeout: 15_000 });
   await expect(operatorStatus).toHaveText("This browser owns the control lock.", { timeout: 5_000 });
-  await expect(page.getByRole("slider", { name: "Rainfall" })).toBeEnabled();
+  await expect(page.getByRole("slider", { name: "Rainfall" })).toBeDisabled();
   expect(failedOneRenewal).toBe(true);
   await page.unroute("**/api/operator-lock");
   await expect(page.locator(".operator-metrics .risk-level")).toHaveText("Safe");
@@ -83,6 +84,9 @@ test("operator, audience sessions, scene sync, feedback, and six viewport layout
     await expect.poll(() => page.locator(".hill-visual-image").evaluate(img => img.naturalWidth), { message: `${stateScenes[0]} scene ${scene.path} should render at native resolution` }).toBeGreaterThanOrEqual(1600);
   }
 
+  await page.getByLabel("Operating mode").selectOption("virtual");
+  await expect(page.getByRole("slider", { name: "Rainfall" })).toBeEnabled();
+  await expect(page.locator(".status-strip > div b")).toHaveText("VIRTUAL OVERRIDE");
   await setSensor(page, "Rainfall", 35);
   await expect(page.locator(".operator-metrics .risk-level")).toHaveText("Watch");
   await expect(page.locator(".hill-risk-state")).toHaveText("Watch");
@@ -306,34 +310,80 @@ test("public display shows authenticated simulated ESP32 telemetry and device of
   await page.getByLabel("Operator access token").fill("theva-e2e-operator-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.locator(".status-strip > div b")).toHaveText("ESP32 DEVICE");
+  await expect(page.locator(".operator-access-card > .operator-access-row small").first()).toHaveText("This browser owns the control lock.", { timeout: 15_000 });
+  await page.getByLabel("Operating mode").selectOption("auto");
+  await expect(page.locator(".status-strip > div b")).toHaveText("ESP32 DEVICE");
   await expect(page.locator(".operator-metrics .risk-level")).toHaveText("Watch");
   await expect(page.locator(".operator-source-note")).toContainText("ESP32 DEVICE · SIMULATED TEST ONLY");
   await expect(page.locator(".hill-scene-head .simulated-test-label")).toBeVisible();
+  for (const [label, value] of [["Soil moisture", "22"], ["Rainfall", "35"], ["Ground movement", "4"]]) {
+    await expect(page.getByRole("slider", { name: label })).toHaveValue(value);
+    await expect(page.getByRole("slider", { name: label })).toBeDisabled();
+  }
 
-  await page.goto("/display");
-  const device = page.getByRole("region", { name: "ESP32 device telemetry" });
+  await page.evaluate(() => fetch("/__test/advance?seconds=5"));
+  const changed = await page.evaluate(async () => {
+    const clock = await (await fetch("/__test/now")).json();
+    const response = await fetch("/api/telemetry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${"A".repeat(43)}` },
+      body: JSON.stringify({
+        deviceId: "theva-esp32-01", sequence: 2, sentAt: new Date(clock.now).toISOString(),
+        label: "SIMULATED TEST ONLY", readings: { moisture: 10, rainfall: 10, movement: 20 }
+      })
+    });
+    return response.status;
+  });
+  expect(changed).toBe(200);
+  await expect(page.getByRole("slider", { name: "Soil moisture" })).toHaveValue("10", { timeout: 10_000 });
+  await expect(page.getByRole("slider", { name: "Rainfall" })).toHaveValue("10", { timeout: 10_000 });
+  await expect(page.getByRole("slider", { name: "Ground movement" })).toHaveValue("20", { timeout: 10_000 });
+  await expect(page.locator(".operator-metrics .risk-level")).toHaveText("Safe");
+
+  const displayPage = await page.context().newPage();
+  await displayPage.goto("/display");
+  const device = displayPage.getByRole("region", { name: "ESP32 device telemetry" });
   await expect(device.getByText("DEVICE ONLINE")).toBeVisible();
-  await expect(device.getByText("SIMULATED TEST ONLY").first()).toBeVisible();
-  await expect(device.locator(".device-telemetry-meta span").nth(1)).toContainText("Sequence1");
-  await expect(device.getByText("35%", { exact: true })).toBeVisible();
-  await expect(page.locator(".display-meta")).toContainText("Input modeESP32 DEVICE");
-  await expect(page.locator(".display-risk h1")).toHaveText("Watch");
-  await expect(page.locator(".display-sensor").filter({ hasText: "Soil moisture" })).toContainText("22%");
-  await expect(page.locator(".display-sensor").filter({ hasText: "Rainfall" })).toContainText("35%");
-  await expect(page.locator(".display-sensor").filter({ hasText: "Ground movement" })).toContainText("4%");
-  await expect(page.locator(".display-sensor").filter({ hasText: "Rainfall" })).toContainText("SIMULATED TEST ONLY");
-  await expect(page.locator(".hill-visual-image")).toHaveAttribute("alt", /Model state: Watch\. Rainfall 35%; soil moisture 22%; ground movement 4%\./);
-  await expect(page.locator(".hill-scene-head .simulated-test-label")).toHaveText("ESP32 DEVICE · SIMULATED TEST ONLY");
+  await expect(device.locator(".device-telemetry-meta span").nth(1)).toContainText("Sequence2");
+  await expect(displayPage.locator(".display-meta")).toContainText("Input modeESP32 DEVICE");
+  await expect(displayPage.locator(".display-risk h1")).toHaveText("Safe");
+  await expect(displayPage.locator(".display-sensor").filter({ hasText: "Soil moisture" })).toContainText("10%");
+  await expect(displayPage.locator(".display-sensor").filter({ hasText: "Rainfall" })).toContainText("10%");
+  await expect(displayPage.locator(".display-sensor").filter({ hasText: "Ground movement" })).toContainText("20%");
+  await expect(displayPage.locator(".display-sensor").filter({ hasText: "Rainfall" })).toContainText("SIMULATED TEST ONLY");
+
+  await page.getByLabel("Operating mode").selectOption("virtual");
+  await expect(page.getByRole("slider", { name: "Soil moisture" })).toBeEnabled();
+  await expect(page.getByRole("slider", { name: "Rainfall" })).toHaveValue("10");
+  await expect(page.locator(".operator-source-note")).toContainText("VIRTUAL OVERRIDE · SIMULATED TEST ONLY");
+  await setSensor(page, "Rainfall", 80);
+  await expect(page.locator(".operator-metrics .risk-level")).toHaveText("High");
+  await expect(displayPage.locator(".display-meta")).toContainText("Input modeVIRTUAL OVERRIDE", { timeout: 10_000 });
+  await expect(displayPage.locator(".display-risk h1")).toHaveText("High", { timeout: 10_000 });
+  await expect(displayPage.locator(".display-sensor").filter({ hasText: "Rainfall" })).toContainText("80%", { timeout: 10_000 });
+
+  await page.getByLabel("Operating mode").selectOption("auto");
+  for (const label of ["Soil moisture", "Rainfall", "Ground movement"]) {
+    await expect(page.getByRole("slider", { name: label })).toBeDisabled();
+  }
+  await expect(page.locator(".status-strip > div b")).toHaveText("ESP32 DEVICE");
+  await expect(page.getByRole("slider", { name: "Soil moisture" })).toHaveValue("10");
+  await expect(page.getByRole("slider", { name: "Rainfall" })).toHaveValue("10");
+  await expect(displayPage.locator(".display-meta")).toContainText("Input modeESP32 DEVICE", { timeout: 10_000 });
+  await expect(displayPage.locator(".display-sensor").filter({ hasText: "Rainfall" })).toContainText("10%", { timeout: 10_000 });
 
   await page.evaluate(() => fetch("/__test/advance?seconds=46"));
-  await page.reload();
+  await expect(page.locator(".status-strip > div b")).toHaveText("AUTOMATIC VIRTUAL FALLBACK", { timeout: 10_000 });
+  await expect(page.getByRole("slider", { name: "Soil moisture" })).toHaveValue("10");
+  await expect(page.getByRole("slider", { name: "Rainfall" })).toHaveValue("80");
+  await expect(page.getByRole("slider", { name: "Ground movement" })).toHaveValue("20");
+  await displayPage.reload();
   await expect(device.getByText("DEVICE OFFLINE")).toBeVisible();
-  await expect(device.getByText("35%", { exact: true })).toBeVisible();
-  await expect(page.locator(".display-meta")).toContainText("Input modeAUTOMATIC VIRTUAL FALLBACK");
-  await expect(page.locator(".display-risk h1")).toHaveText("Safe");
-  await expect(page.locator(".display-sensor").filter({ hasText: "Rainfall" })).toContainText("18%");
-  await expect(page.locator(".display-sensor").filter({ hasText: "Ground movement" })).toContainText("12%");
-  await expect(page.locator(".hill-visual-image")).toHaveAttribute("alt", /Model state: Safe\. Rainfall 18%; soil moisture 22%; ground movement 12%\./);
+  await expect(device.locator(".device-telemetry-reading").filter({ hasText: "Rainfall" })).toContainText("10%");
+  await expect(displayPage.locator(".display-meta")).toContainText("Input modeAUTOMATIC VIRTUAL FALLBACK");
+  await expect(displayPage.locator(".display-risk h1")).toHaveText("High");
+  await expect(displayPage.locator(".display-sensor").filter({ hasText: "Rainfall" })).toContainText("80%");
+  await expect(displayPage.locator(".hill-visual-image")).toHaveAttribute("alt", /Model state: High\. Rainfall 80%; soil moisture 10%; ground movement 20%\./);
 });
 
 test("operator state changes reach the public display and logout is reflected there", async ({ browser }) => {
@@ -341,6 +391,9 @@ test("operator state changes reach the public display and logout is reflected th
   await operatorPage.goto("/operator");
   await operatorPage.getByLabel("Operator access token").fill("theva-e2e-operator-token");
   await operatorPage.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(operatorPage.locator(".operator-access-card > .operator-access-row small").first()).toHaveText("This browser owns the control lock.", { timeout: 15_000 });
+  await expect(operatorPage.getByRole("slider", { name: "Rainfall" })).toBeDisabled();
+  await operatorPage.getByLabel("Operating mode").selectOption("virtual");
   await expect(operatorPage.getByRole("slider", { name: "Rainfall" })).toBeEnabled();
 
   const displayPage = await browser.newPage({ viewport: { width: 1920, height: 1080 } });

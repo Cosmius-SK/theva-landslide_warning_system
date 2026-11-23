@@ -252,12 +252,14 @@ function PublicDisplay() {
     ? state.sensors.map(sensor => ({ ...sensor, failed: sensor.healthy !== true }))
     : initialSensors.map(sensor => ({ ...sensor, failed: true }));
   const deviceReadings = freshDeviceReadings(deviceTelemetry);
-  const sensors = withDeviceReadings(sharedSensors, deviceReadings);
-  const risk = assess(deviceReadings
-    ? Object.values(deviceReadings)
+  const virtualOverrideActive = state?.mode === "virtual" || state?.source === "virtual";
+  const modelDeviceReadings = virtualOverrideActive ? null : deviceReadings;
+  const sensors = withDeviceReadings(sharedSensors, modelDeviceReadings);
+  const risk = assess(modelDeviceReadings
+    ? Object.values(modelDeviceReadings)
     : state?.sensors?.filter(sensor => sensor.healthy === true).map(sensor => Number(sensor.value)) || []);
   const scene = normalizeScene(state?.scene || "panorama");
-  const sourceLabel = deviceReadings ? "ESP32 DEVICE" : "AUTOMATIC VIRTUAL FALLBACK";
+  const sourceLabel = modelDeviceReadings ? "ESP32 DEVICE" : virtualOverrideActive ? "VIRTUAL OVERRIDE" : "AUTOMATIC VIRTUAL FALLBACK";
   const educationalAction = risk.level === "Evacuation" || risk.level === "High"
     ? "In this model, move to the safe area shown by your teacher and discuss which readings changed."
     : risk.level === "Watch"
@@ -281,12 +283,12 @@ function PublicDisplay() {
       </section>
       <section className="display-scene-wrap">
         <div className="display-section-head"><div><div className="eyebrow">SHARED CINEMATIC SCENE</div><h2>{risk.level === "Evacuation" ? "Evacuation alert in model" : risk.level === "High" ? "Slope under stress" : "Slope conditions"}</h2></div><span className="pill">{SCENE_VIEWS.find(view => view.id === scene)?.label || "Panorama"}</span></div>
-        {state ? <HillScene sensors={sensors} risk={risk} scene={scene} audience deviceTelemetryActive={Boolean(deviceReadings)} /> : <div className="display-scene-placeholder"><WifiOff size={30}/><span>Waiting for the first operator update</span></div>}
+        {state ? <HillScene sensors={sensors} risk={risk} scene={scene} audience deviceTelemetryActive={Boolean(modelDeviceReadings)} /> : <div className="display-scene-placeholder"><WifiOff size={30}/><span>Waiting for the first operator update</span></div>}
       </section>
       <aside className="display-data">
         <div className="display-section-head"><div><div className="eyebrow">SENSOR CHANNELS</div><h2>Model readings</h2></div><span>{sensors.filter(sensor => !sensor.failed).length}/3 available</span></div>
         <div className="display-sensors">{sensors.map(sensor => <article className={`display-sensor ${sensor.failed ? "failed" : ""}`} key={sensor.id}>
-          <i className={`dot ${sensor.failed ? "offline" : "online"}`}/><div><b>{sensor.name}</b><small>{sensor.failed ? "Unavailable" : deviceReadings ? "ESP32 DEVICE · SIMULATED TEST ONLY" : "Simulation input · monitoring"}</small></div><strong>{sensor.failed ? "—" : `${sensor.value}%`}</strong>
+          <i className={`dot ${sensor.failed ? "offline" : "online"}`}/><div><b>{sensor.name}</b><small>{sensor.failed ? "Unavailable" : modelDeviceReadings ? "ESP32 DEVICE · SIMULATED TEST ONLY" : virtualOverrideActive ? "VIRTUAL OVERRIDE · SIMULATED TEST ONLY" : "Simulation input · monitoring"}</small></div><strong>{sensor.failed ? "—" : `${sensor.value}%`}</strong>
         </article>)}</div>
         <div className="display-meta"><span><b>Input mode</b>{sourceLabel}</span><span><b>Last update</b>{updatedAt ? new Date(updatedAt).toLocaleString() : "No shared update received"}</span><span><b>Synchronization</b>{connectionText}</span></div>
         <DeviceTelemetryPanel deviceTelemetry={deviceTelemetry}/>
@@ -339,9 +341,11 @@ function ThevaApp() {
   // Virtual controls continue syncing as before; a fresh ESP32 record overrides model inputs.
   const activeSource = mode === "hardware" ? "hardware-unavailable" : mode === "virtual" ? "virtual" : "virtual-fallback";
   const deviceReadings = freshDeviceReadings(deviceTelemetry);
+  const virtualOverrideActive = mode === "virtual";
+  const modelDeviceReadings = virtualOverrideActive ? null : deviceReadings;
   const activeSensors = withDeviceReadings(
     sensors.map(s => ({ ...s, failed: mode === "hardware" || faults.includes(s.id) })),
-    deviceReadings
+    modelDeviceReadings
   );
   const values = activeSensors.filter(s => !s.failed).map(s => s.value);
   const risk = useMemo(() => assess(values), [sensors, faults, mode, deviceReadings]);
@@ -919,6 +923,12 @@ function ThevaApp() {
     setSensors(prev => prev.map(s => s.id === id ? { ...s, value: Number(value) } : s));
     setLastUpdate(new Date());
   }
+  function changeOperatingMode(nextMode) {
+    if (nextMode === "virtual" && mode !== "virtual" && deviceReadings) {
+      setSensors(previous => previous.map(sensor => ({ ...sensor, value: deviceReadings[sensor.id] })));
+    }
+    setMode(nextMode);
+  }
   function toggleFault(id) {
     setFaults(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }
@@ -961,12 +971,14 @@ function ThevaApp() {
 
   const live = page === "audience";
   const sharedAudienceSensors = sharedState?.sensors?.length ? sharedState.sensors.map(s => ({ ...s, failed: s.healthy !== true })) : activeSensors;
-  const audienceSensors = withDeviceReadings(sharedAudienceSensors, deviceReadings);
+  const audienceVirtualOverrideActive = sharedState?.mode === "virtual" || sharedState?.source === "virtual";
+  const audienceDeviceReadings = audienceVirtualOverrideActive ? null : deviceReadings;
+  const audienceSensors = withDeviceReadings(sharedAudienceSensors, audienceDeviceReadings);
   const audienceValues = audienceSensors.filter(s => !s.failed).map(s => s.value);
   const audienceRisk = assess(audienceValues);
   const audienceScene = normalizeScene(sharedState?.scene || scene);
   const showOperator = page === "operator" || page === "diagnostics" || page === "feedback-admin";
-  const statusLabel = deviceReadings ? "ESP32 DEVICE" : mode === "hardware" ? "HARDWARE INPUT UNAVAILABLE" : "AUTOMATIC VIRTUAL FALLBACK";
+  const statusLabel = virtualOverrideActive ? "VIRTUAL OVERRIDE" : deviceReadings ? "ESP32 DEVICE" : mode === "hardware" ? "HARDWARE INPUT UNAVAILABLE" : "AUTOMATIC VIRTUAL FALLBACK";
 
   return <div className={"app-shell" + (page === "audience" ? " audience-shell" : page === "operator" ? " operator-shell" : "")}>
     <header className="topbar">
@@ -994,31 +1006,31 @@ function ThevaApp() {
             <button id="operator-controls-tab" role="tab" aria-controls="operator-controls-panel" aria-selected={operatorMobileTab === "controls"} onClick={() => setOperatorMobileTab("controls")}>Inputs</button>
             <button id="operator-session-tab" role="tab" aria-controls="operator-controls-panel" aria-selected={operatorMobileTab === "session"} onClick={() => setOperatorMobileTab("session")}>Session</button>
           </div>
-          <div className="status-strip"><div className="status-icon"><Radio size={18}/></div><div><b>{statusLabel}</b><small>{deviceReadings ? "Fresh simulated ESP32 telemetry drives model readings, scene labels and warning calculations." : mode === "hardware" ? `${deviceTelemetry.telemetry?.online ? "ESP32 device online" : deviceTelemetry.configured === false ? "ESP32 telemetry is not configured" : "ESP32 device offline or waiting for a packet"}. Hardware-only mode has no available model input.` : `${healthy} of 3 simulation channels available · simulated controller heartbeat ${espOnline ? "on" : "off"}.`}</small></div><span className="updated">{syncStatus === "connected" ? "CLOUD SYNC" : syncStatus === "not-configured" ? "LOCAL MODE" : "CLOUD OFFLINE"}</span></div>
+          <div className="status-strip"><div className="status-icon"><Radio size={18}/></div><div><b>{statusLabel}</b><small>{virtualOverrideActive ? "SIMULATED TEST ONLY · virtual readings drive model readings, risk and the cinematic scene." : deviceReadings ? "Fresh simulated ESP32 telemetry drives model readings, scene labels and warning calculations." : mode === "hardware" ? `${deviceTelemetry.telemetry?.online ? "ESP32 device online" : deviceTelemetry.configured === false ? "ESP32 telemetry is not configured" : "ESP32 device offline or waiting for a packet"}. Hardware-only mode has no available model input.` : `${healthy} of 3 simulation channels available · simulated controller heartbeat ${espOnline ? "on" : "off"}.`}</small></div><span className="updated">{syncStatus === "connected" ? "CLOUD SYNC" : syncStatus === "not-configured" ? "LOCAL MODE" : "CLOUD OFFLINE"}</span></div>
           <div className="operator-live-layout">
             <section id="operator-monitor-panel" className="operator-monitor-panel" role="tabpanel" aria-labelledby="operator-monitor-tab">
               <div className="metrics-grid operator-metrics">
                 <section className={"risk-card " + risk.tone}><div className="card-kicker">CURRENT LANDSLIDE INDICATION</div><div className="risk-main"><div><div className="risk-level">{risk.level}</div><p>{risk.message}</p></div><div className="risk-emblem"><AlertTriangle size={25}/></div></div><div className="risk-foot"><span>DEMO MODEL</span><span>NOT A FORECAST</span></div></section>
                 <section className="health-card"><div className="card-kicker">AVAILABLE INPUTS</div><div className="health-number">{healthy}<small> / 3</small></div><div className="health-track"><span style={{width: (healthy/3*100)+"%"}}/></div><p>{healthy === 3 ? "All channels active" : healthy + " channels active"}</p></section>
               </div>
-              <HillScene sensors={activeSensors} risk={risk} scene={scene} onSceneChange={lockStatus === "active" ? setScene : undefined} compact deviceTelemetryActive={Boolean(deviceReadings)} />
-              <p className="operator-source-note">Input: {deviceReadings ? "ESP32 DEVICE · SIMULATED TEST ONLY" : mode === "hardware" ? "Hardware only · unavailable" : mode === "virtual" ? "Virtual override" : "AUTOMATIC VIRTUAL FALLBACK"} · Scene follows the shared risk state.</p>
+              <HillScene sensors={activeSensors} risk={risk} scene={scene} onSceneChange={lockStatus === "active" ? setScene : undefined} compact deviceTelemetryActive={Boolean(modelDeviceReadings)} />
+              <p className="operator-source-note">Input: {virtualOverrideActive ? "VIRTUAL OVERRIDE · SIMULATED TEST ONLY" : deviceReadings ? "ESP32 DEVICE · SIMULATED TEST ONLY" : mode === "hardware" ? "Hardware only · unavailable" : "AUTOMATIC VIRTUAL FALLBACK"} · Scene follows the shared risk state.</p>
             </section>
 
             <section id="operator-controls-panel" className="operator-controls-panel" role="tabpanel" aria-labelledby="operator-controls-tab">
-              <div className="section-head compact-section-head"><div><h2>Sensor inputs</h2><p>Adjust values or test a channel fault.</p></div><span className="pill">{mode === "hardware" ? "NO MODEL INPUT" : "SIMULATION"}</span></div>
+              <div className="section-head compact-section-head"><div><h2>Sensor inputs</h2><p>{virtualOverrideActive ? "Virtual override is active. Adjust the simulated readings." : "ESP32 readings are read-only. Select virtual override to adjust simulated readings."}</p></div><span className="pill">{virtualOverrideActive ? "VIRTUAL OVERRIDE" : deviceReadings ? "ESP32 DEVICE" : mode === "hardware" ? "NO MODEL INPUT" : "AUTOMATIC VIRTUAL FALLBACK"}</span></div>
               <div className="sensor-grid">{sensors.map(sensor => {
-                const Icon = sensor.icon; const simulatedFault = faults.includes(sensor.id); const failed = mode === "hardware" || simulatedFault;
+                const Icon = sensor.icon; const simulatedFault = faults.includes(sensor.id); const usingDevice = Boolean(modelDeviceReadings); const failed = usingDevice ? false : mode === "hardware" || simulatedFault; const inputValue = usingDevice ? modelDeviceReadings[sensor.id] : sensor.value;
                 return <section className={"sensor-card " + (failed ? "failed" : "")} key={sensor.id}>
-                  <div className="sensor-top"><div className="sensor-icon"><Icon size={16}/></div><span className={"sensor-state " + (failed ? "bad" : "good")}>{mode === "hardware" ? "UNAVAILABLE" : simulatedFault ? "FAULT" : "HEALTHY"}</span></div>
+                  <div className="sensor-top"><div className="sensor-icon"><Icon size={16}/></div><span className={"sensor-state " + (failed ? "bad" : "good")}>{failed ? mode === "hardware" ? "UNAVAILABLE" : "FAULT" : usingDevice ? "ESP32 DEVICE" : virtualOverrideActive ? "SIMULATED" : "FALLBACK"}</span></div>
                   <h3>{sensor.name}</h3>
-                  <div className="slider-row"><input aria-label={sensor.name} type="range" min="0" max="100" value={sensor.value} onChange={e => changeValue(sensor.id, e.target.value)} disabled={failed || lockStatus !== "active"}/><b>{failed ? "—" : sensor.value}</b></div>
-                  <button className={"fault-btn " + (simulatedFault ? "restore" : "")} onClick={() => toggleFault(sensor.id)} disabled={lockStatus !== "active" || mode === "hardware"}>{mode === "hardware" ? "Switch input mode to resume" : simulatedFault ? "Restore sensor" : "Simulate sensor fault"}</button>
+                  <div className="slider-row"><input aria-label={sensor.name} type="range" min="0" max="100" value={inputValue} onChange={e => changeValue(sensor.id, e.target.value)} disabled={!virtualOverrideActive || failed || lockStatus !== "active"}/><b>{failed ? "—" : inputValue}</b></div>
+                  <button className={"fault-btn " + (simulatedFault ? "restore" : "")} onClick={() => toggleFault(sensor.id)} disabled={lockStatus !== "active" || !virtualOverrideActive}>{virtualOverrideActive ? simulatedFault ? "Restore sensor" : "Simulate sensor fault" : "Enable virtual override to edit"}</button>
                 </section>;
               })}</div>
 
               <div className="operator-quick-controls">
-                <label><span>Operating mode</span><select value={mode} onChange={e => setMode(e.target.value)} disabled={lockStatus !== "active"}><option value="auto">Automatic fallback</option><option value="virtual">Virtual override</option><option value="hardware">Hardware only</option></select></label>
+                <label><span>Operating mode</span><select value={mode} onChange={e => changeOperatingMode(e.target.value)} disabled={lockStatus !== "active"}><option value="auto">ESP32 device / automatic fallback</option><option value="virtual">Virtual override</option><option value="hardware">Hardware only</option></select></label>
                 <div className="heartbeat-control"><div><b>Virtual controller heartbeat</b><small>Simulation control · separate from the ESP32 device status</small></div><button className="btn secondary" onClick={() => setEspOnline(v => !v)} disabled={lockStatus !== "active"}>{espOnline ? "Set offline" : "Set online"}</button></div>
               </div>
 
@@ -1037,7 +1049,7 @@ function ThevaApp() {
           </div>
         </>}
 
-        {page === "diagnostics" && <><DeviceTelemetryPanel deviceTelemetry={deviceTelemetry}/><div className="diagnostic-grid"><section className="health-card"><div className="card-kicker">VIRTUAL CONTROLS</div><h2>Available</h2><p>Operator sliders, virtual mode and automatic fallback continue to use the existing simulated inputs.</p></section><section className="health-card"><div className="card-kicker">INPUT SOURCE</div><h2>{deviceReadings ? "ESP32 DEVICE" : mode === "hardware" ? "Unavailable in risk model" : mode === "virtual" ? "Virtual override" : "AUTOMATIC VIRTUAL FALLBACK"}</h2><p>{deviceReadings ? "SIMULATED TEST ONLY readings drive the dashboard model while the device is online." : "Virtual controls remain available as the dashboard model input."}</p></section><section className="health-card"><div className="card-kicker">CLOUD / REALTIME</div><h2>{syncStatus.toUpperCase()}</h2><p>Last shared-state update: {sharedUpdatedAt ? new Date(sharedUpdatedAt).toLocaleString() : "No cloud update received"}.</p></section></div><div className="section-head"><div><h2>Channel diagnostics</h2><p>Virtual sensor faults and environmental risk are reported separately.</p></div></div><div className="diag-list">{activeSensors.map(s => <div className="diag-row" key={s.id}><span className={"dot " + (s.failed ? "offline" : "online")}/><b>{s.name}</b><span>{s.failed ? mode === "hardware" ? "Unavailable" : "Simulated fault" : deviceReadings ? "ESP32 device · simulated test only" : "Simulation input"}</span><small>{s.failed ? "Excluded from the risk calculation" : deviceReadings ? "Active dashboard input" : "Available virtual channel"}</small></div>)}</div>{publishError && <p className="disclaimer">{publishError}</p>}</>}
+        {page === "diagnostics" && <><DeviceTelemetryPanel deviceTelemetry={deviceTelemetry}/><div className="diagnostic-grid"><section className="health-card"><div className="card-kicker">VIRTUAL CONTROLS</div><h2>Available</h2><p>Operator sliders, virtual mode and automatic fallback continue to use the existing simulated inputs.</p></section><section className="health-card"><div className="card-kicker">INPUT SOURCE</div><h2>{modelDeviceReadings ? "ESP32 DEVICE" : virtualOverrideActive ? "VIRTUAL OVERRIDE" : mode === "hardware" ? "Unavailable in risk model" : "AUTOMATIC VIRTUAL FALLBACK"}</h2><p>{modelDeviceReadings ? "SIMULATED TEST ONLY readings drive the dashboard model while the device is online." : "Virtual controls remain available as the dashboard model input."}</p></section><section className="health-card"><div className="card-kicker">CLOUD / REALTIME</div><h2>{syncStatus.toUpperCase()}</h2><p>Last shared-state update: {sharedUpdatedAt ? new Date(sharedUpdatedAt).toLocaleString() : "No cloud update received"}.</p></section></div><div className="section-head"><div><h2>Channel diagnostics</h2><p>Virtual sensor faults and environmental risk are reported separately.</p></div></div><div className="diag-list">{activeSensors.map(s => <div className="diag-row" key={s.id}><span className={"dot " + (s.failed ? "offline" : "online")}/><b>{s.name}</b><span>{s.failed ? mode === "hardware" ? "Unavailable" : "Simulated fault" : modelDeviceReadings ? "ESP32 device · simulated test only" : virtualOverrideActive ? "Virtual override · simulated test only" : "Simulation input"}</span><small>{s.failed ? "Excluded from the risk calculation" : "Active dashboard input"}</small></div>)}</div>{publishError && <p className="disclaimer">{publishError}</p>}</>}
         {page === "feedback-admin" && <><div className="section-head"><div><h2>Feedback submissions</h2><p>{lockStatus === "active" ? `${feedback.length} persistent submissions loaded.` : "Connect the active operator console to review saved feedback."}</p></div>{lockStatus === "active" && <button className="btn secondary" onClick={() => {const csv = ["id,timestamp,rating,learned,comment", ...feedback.map(f => [f.id,f.created_at,f.rating,f.learning,JSON.stringify(f.comment)].join(","))].join("\n"); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download="theva-feedback.csv"; a.click(); URL.revokeObjectURL(a.href);}}>Export CSV</button>}</div>{feedbackError && <p className="session-message" role="status">{feedbackError}</p>}{lockStatus === "active" && (feedback.length ? feedback.map(f => <div className="feedback-row" key={f.id}><b>{f.rating}/5 · Learned: {f.learning}</b><small>{new Date(f.created_at).toLocaleString()}</small><p>{f.comment || "No comment"}</p></div>) : <div className="empty-state">No feedback received yet.</div>)}</>}
       </main>
     </div>}
@@ -1046,11 +1058,11 @@ function ThevaApp() {
     {page === "audience" && <main className="audience-page">
       <div className="audience-top"><span className="pill live-pill"><i className="dot online"/> LIVE DEMONSTRATION</span><span className="timer">SESSION ENDS IN {Math.floor(secondsLeft/60)}:{String(secondsLeft%60).padStart(2,"0")}</span></div>
       <div className="audience-title"><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>Small signals. Safer slopes.</h1><p>Watch rain and ground changes affect the hillside model.</p></div>
-      <HillScene sensors={audienceSensors} risk={audienceRisk} scene={audienceScene} audience deviceTelemetryActive={Boolean(deviceReadings)} />
+      <HillScene sensors={audienceSensors} risk={audienceRisk} scene={audienceScene} audience deviceTelemetryActive={Boolean(audienceDeviceReadings)} />
       <aside className="audience-summary">
         <div className={"audience-risk " + audienceRisk.tone}><span>CURRENT MODEL INDICATION</span><h2>{audienceRisk.level}</h2><p>{audienceRisk.message}</p>{audienceSensors.some(s => s.failed) && <small>One or more sensors are unavailable. Other healthy readings still help the model.</small>}</div>
         <div className="audience-sensors">{audienceSensors.map(s => <div className={"audience-sensor " + (s.failed ? "failed" : "")} key={s.id}><span className={"dot " + (s.failed ? "offline" : "online")}/><b>{s.name}</b><strong>{s.failed ? "—" : `${s.value}%`}</strong><small>{s.failed ? "Sensor unavailable" : "Monitoring active"}</small></div>)}</div>
-        <div className="audience-session-meta"><span>{deviceReadings ? "ESP32 DEVICE · SIMULATED TEST ONLY" : "AUTOMATIC VIRTUAL FALLBACK"}</span><span>{sharedUpdatedAt ? "Updated " + new Date(sharedUpdatedAt).toLocaleTimeString() : "Waiting for operator data"}</span><span>Cloud {syncStatus}</span></div>
+        <div className="audience-session-meta"><span>{audienceDeviceReadings ? "ESP32 DEVICE · SIMULATED TEST ONLY" : audienceVirtualOverrideActive ? "VIRTUAL OVERRIDE · SIMULATED TEST ONLY" : "AUTOMATIC VIRTUAL FALLBACK"}</span><span>{sharedUpdatedAt ? "Updated " + new Date(sharedUpdatedAt).toLocaleTimeString() : "Waiting for operator data"}</span><span>Cloud {syncStatus}</span></div>
         <p className="disclaimer">Educational demonstration only. This is not a real landslide warning service.</p>
         <button className="btn secondary audience-feedback-button" onClick={() => setPage("feedback")}>Share feedback</button>
       </aside>
