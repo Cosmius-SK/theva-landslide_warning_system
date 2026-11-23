@@ -105,7 +105,115 @@ function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience 
   </section>;
 }
 
-export default function App() {
+function PublicDisplay() {
+  const [state, setState] = useState(null);
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [operatorConnected, setOperatorConnected] = useState(null);
+  const [connection, setConnection] = useState("connecting");
+  const updatedAtRef = useRef(null);
+
+  useEffect(() => {
+    let stopped = false;
+    let timer;
+    let inFlight = false;
+    let delay = 5_000;
+    let channel;
+    const accept = (next, timestamp) => {
+      if (!next || !isCurrentOrNewerUpdate(timestamp, updatedAtRef.current)) return;
+      if (timestamp) updatedAtRef.current = timestamp;
+      setState(next);
+      setUpdatedAt(timestamp || null);
+      setConnection("live");
+    };
+    const poll = async () => {
+      if (stopped || inFlight || document.visibilityState === "hidden") return;
+      inFlight = true;
+      try {
+        const response = await apiFetch("/api/state", { cache: "no-store" }, 8_000);
+        const data = await readJsonResponse(response);
+        if (!response.ok) throw new Error("Public state unavailable");
+        setOperatorConnected(data.operatorConnected === true);
+        if (data.state) accept(data.state, data.updatedAt);
+        else setConnection("waiting");
+        delay = 5_000;
+      } catch {
+        if (!stopped) setConnection(updatedAtRef.current ? "stale" : "offline");
+        delay = Math.min(30_000, delay * 2);
+      } finally {
+        inFlight = false;
+        if (!stopped) timer = window.setTimeout(poll, delay);
+      }
+    };
+    if (supabase) {
+      channel = supabase.channel("theva-public-display")
+        .on("postgres_changes", { event: "*", schema: "public", table: "demo_state", filter: "id=eq.1" }, payload => {
+          if (!stopped && payload.new?.state) accept(payload.new.state, payload.new.updated_at);
+        })
+        .subscribe(status => {
+          if (stopped) return;
+          if (status === "SUBSCRIBED") poll();
+          if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) setConnection(updatedAtRef.current ? "stale" : "offline");
+        });
+    }
+    const onWake = () => { if (document.visibilityState === "visible") { clearTimeout(timer); poll(); } };
+    window.addEventListener("online", onWake);
+    window.addEventListener("focus", onWake);
+    document.addEventListener("visibilitychange", onWake);
+    poll();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      window.removeEventListener("online", onWake);
+      window.removeEventListener("focus", onWake);
+      document.removeEventListener("visibilitychange", onWake);
+      if (channel && supabase) supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const sensors = state?.sensors?.length
+    ? state.sensors.map(sensor => ({ ...sensor, failed: sensor.healthy !== true }))
+    : initialSensors.map(sensor => ({ ...sensor, failed: true }));
+  const risk = assess(state?.sensors?.filter(sensor => sensor.healthy === true).map(sensor => Number(sensor.value)) || []);
+  const scene = normalizeScene(state?.scene || "panorama");
+  const sourceLabel = state?.source === "hardware" ? "Hardware inputs" : state?.source === "virtual" ? "Virtual simulation" : "Automatic virtual fallback";
+  const educationalAction = risk.level === "Evacuation" || risk.level === "High"
+    ? "In this model, move to the safe area shown by your teacher and discuss which readings changed."
+    : risk.level === "Watch"
+      ? "Watch how rainfall and soil moisture change together in the model."
+      : risk.level === "Safe"
+        ? "Observe the calm hillside, then change a demonstration sensor with the operator."
+        : "Waiting for the operator console to publish its first shared reading.";
+  const connectionText = connection === "stale" ? "CONNECTION LOST · SHOWING LAST UPDATE" : connection === "offline" ? "OFFLINE · NO LIVE READING" : operatorConnected === false && connection === "live" ? "OPERATOR OFFLINE · LAST SHARED STATE" : operatorConnected === true && connection === "live" ? "LIVE · OPERATOR CONNECTED" : connection === "waiting" ? "WAITING FOR OPERATOR" : "CONNECTING TO CLOUD";
+
+  return <main className="public-display">
+    <header className="display-header">
+      <a className="brand" href="/" aria-label="Theva Live home"><span className="brand-mark">T</span><span><b>THEVA LIVE</b><small>PUBLIC LEARNING DISPLAY</small></span></a>
+      <div className={`display-connection ${connection}`} role="status" aria-live="polite"><i className="dot"/>{connectionText}</div>
+    </header>
+    <div className="display-content">
+      <section className={`display-risk ${risk.level.toLowerCase()}`}>
+        <div className="eyebrow">CURRENT MODEL INDICATION</div>
+        <h1>{risk.level}</h1>
+        <p>{risk.message}</p>
+        <div className="display-action"><b>LEARNING ACTION</b><span>{educationalAction}</span></div>
+      </section>
+      <section className="display-scene-wrap">
+        <div className="display-section-head"><div><div className="eyebrow">SHARED CINEMATIC SCENE</div><h2>{risk.level === "Evacuation" ? "Evacuation alert in model" : risk.level === "High" ? "Slope under stress" : "Slope conditions"}</h2></div><span className="pill">{SCENE_VIEWS.find(view => view.id === scene)?.label || "Panorama"}</span></div>
+        {state ? <HillScene sensors={sensors} risk={risk} scene={scene} audience /> : <div className="display-scene-placeholder"><WifiOff size={30}/><span>Waiting for the first operator update</span></div>}
+      </section>
+      <aside className="display-data">
+        <div className="display-section-head"><div><div className="eyebrow">SENSOR CHANNELS</div><h2>Model readings</h2></div><span>{sensors.filter(sensor => !sensor.failed).length}/3 available</span></div>
+        <div className="display-sensors">{sensors.map(sensor => <article className={`display-sensor ${sensor.failed ? "failed" : ""}`} key={sensor.id}>
+          <i className={`dot ${sensor.failed ? "offline" : "online"}`}/><div><b>{sensor.name}</b><small>{sensor.failed ? "Unavailable" : "Simulation input · monitoring"}</small></div><strong>{sensor.failed ? "—" : `${sensor.value}%`}</strong>
+        </article>)}</div>
+        <div className="display-meta"><span><b>Input mode</b>{sourceLabel}</span><span><b>Last update</b>{updatedAt ? new Date(updatedAt).toLocaleString() : "No shared update received"}</span><span><b>Synchronization</b>{connectionText}</span></div>
+      </aside>
+    </div>
+    <footer className="display-disclaimer">EDUCATIONAL SIMULATION – NOT A REAL-WORLD LANDSLIDE WARNING SYSTEM</footer>
+  </main>;
+}
+
+function ThevaApp() {
   const [page, setPage] = useState(() => {
     if (window.location.pathname.startsWith("/operator")) return "operator";
     return window.location.pathname === "/audience" && getAudienceTokenFromUrl() ? "audience-loading" : "welcome";
@@ -130,14 +238,16 @@ export default function App() {
   const [audienceSessionUrl, setAudienceSessionUrl] = useState("");
   const [audienceSessionQr, setAudienceSessionQr] = useState("");
   const [audienceSessionError, setAudienceSessionError] = useState("");
-  const [operatorToken, setOperatorToken] = useState("");
-  const [operatorOwnerId] = useState(() => crypto.randomUUID());
-  const [lockStatus, setLockStatus] = useState("unlocked");
+  const [operatorActive, setOperatorActive] = useState(false);
+  const [operatorHydrated, setOperatorHydrated] = useState(false);
+  const [operatorOwnerId, setOperatorOwnerId] = useState("");
+  const [lockStatus, setLockStatus] = useState(() => window.location.pathname.startsWith("/operator") ? "restoring" : "unlocked");
   const [lockError, setLockError] = useState("");
   const [tokenInput, setTokenInput] = useState("");
   const [sharedState, setSharedState] = useState(null);
   const [sharedUpdatedAt, setSharedUpdatedAt] = useState(null);
   const sharedUpdatedAtRef = useRef(null);
+  const operatorRestoreGeneration = useRef(0);
   const [operatorMobileTab, setOperatorMobileTab] = useState("monitor");
   const [syncStatus, setSyncStatus] = useState(realtimeEnabled ? "connecting" : "not-configured");
   const [publishError, setPublishError] = useState("");
@@ -295,16 +405,116 @@ export default function App() {
     };
   }, [page, audienceToken]);
 
-  // Keep the server-side operator lease alive while this console is active.
+  // Restore the signed, HttpOnly operator session after a reload. The cookie
+  // never exposes the access token to browser storage or JavaScript.
   useEffect(() => {
-    if (!operatorToken) return;
+    if (page !== "operator" || operatorActive) return;
+    let stopped = false;
+    const generation = ++operatorRestoreGeneration.current;
+    let timer;
+    let attempts = 0;
+    async function restoreOperator() {
+      if (stopped || generation !== operatorRestoreGeneration.current) return;
+      try {
+        const response = await apiFetch("/api/operator-lock", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "restore" }), cache: "no-store"
+        }, 12_000);
+        const data = await readJsonResponse(response);
+        if (stopped || generation !== operatorRestoreGeneration.current) return;
+        if (response.ok && data.active) {
+          setOperatorOwnerId(data.ownerId);
+          setOperatorHydrated(false);
+          setOperatorActive(true);
+          setLockStatus("restoring");
+          setLockError("Restoring the latest shared state…");
+          try {
+            const sessionResponse = await apiFetch("/api/audience-session", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "status", ownerId: data.ownerId }), cache: "no-store"
+            }, 12_000);
+            const sessionData = await readJsonResponse(sessionResponse);
+            if (sessionResponse.ok) {
+              setAudienceSessionActive(Boolean(sessionData.active));
+              setAudienceSessionExpiresAt(sessionData.expiresAt || null);
+              setAudienceSessionUrl(""); setAudienceSessionQr("");
+            }
+          } catch { /* The session controls remain available for a later retry. */ }
+          return;
+        }
+        setOperatorActive(false);
+        setOperatorOwnerId("");
+        setLockStatus(response.status === 409 ? "blocked" : "unlocked");
+        if (data.reason === "idle_expired" || data.reason === "absolute_expired") setLockError("Operator session expired. Enter the access token to reconnect.");
+        else if (response.status === 409) setLockError(data.error || "Another operator owns the control lock.");
+        else setLockError("");
+      } catch {
+        attempts += 1;
+        if (!stopped && generation === operatorRestoreGeneration.current) {
+          setLockStatus("reconnecting");
+          setLockError("Checking the saved operator session. Reconnecting automatically…");
+          timer = window.setTimeout(restoreOperator, Math.min(15_000, 1_000 * 2 ** Math.min(attempts, 4)));
+        }
+      }
+    }
+    restoreOperator();
+    return () => { stopped = true; window.clearTimeout(timer); };
+  }, [page]);
+
+  // Hydrate shared state before enabling publishing, preventing a reload from
+  // overwriting the latest state with this tab's initial defaults.
+  useEffect(() => {
+    if (!operatorActive || !operatorOwnerId || operatorHydrated) return;
+    let stopped = false;
+    let timer;
+    let attempts = 0;
+    async function hydrate() {
+      try {
+        const response = await apiFetch("/api/state", { cache: "no-store" }, 12_000);
+        const snapshot = await readJsonResponse(response);
+        if (!response.ok) throw new Error("Shared state is temporarily unavailable.");
+        if (stopped) return;
+        if (snapshot.state) {
+          const saved = snapshot.state;
+          if (saved.scene) setScene(normalizeScene(saved.scene));
+          if (Array.isArray(saved.sensors)) {
+            setSensors(prev => prev.map(sensor => {
+              const remote = saved.sensors.find(item => item.id === sensor.id);
+              return remote ? { ...sensor, value: Number(remote.value) } : sensor;
+            }));
+            setFaults(saved.sensors.filter(item => item.healthy === false).map(item => item.id));
+          }
+          if (typeof saved.espOnline === "boolean") setEspOnline(saved.espOnline);
+          if (saved.mode) setMode(saved.mode);
+          acceptSharedState(saved, snapshot.updatedAt);
+        }
+        setOperatorHydrated(true);
+        setLockStatus("active");
+        setLockError("");
+      } catch {
+        attempts += 1;
+        if (!stopped) {
+          setLockStatus("reconnecting");
+          setLockError("Operator lock is restored. Waiting for shared state before enabling controls…");
+          timer = window.setTimeout(hydrate, Math.min(15_000, 1_000 * 2 ** Math.min(attempts, 4)));
+        }
+      }
+    }
+    hydrate();
+    return () => { stopped = true; window.clearTimeout(timer); };
+  }, [operatorActive, operatorOwnerId, operatorHydrated]);
+
+  // Keep the server-side operator lease alive without extending the genuine
+  // interaction timeout.
+  useEffect(() => {
+    if (!operatorActive || !operatorOwnerId) return;
     let stopped = false;
     let inFlight = false;
     let failures = 0;
     let timer;
     const requestLock = (action) => apiFetch("/api/operator-lock", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, ownerId: operatorOwnerId })
     }, 12_000);
 
@@ -316,25 +526,25 @@ export default function App() {
         if (response.status === 401) {
           if (!stopped) {
             setLockStatus("lost");
-            setLockError("Operator authorization was rejected. Reconnect to continue.");
-            setOperatorToken("");
+            setLockError("Operator session expired or was revoked. Enter the access token to reconnect.");
+            setOperatorActive(false);
           }
           return;
         }
-        if (response.status === 409) response = await requestLock("acquire");
+        if (response.status === 409) response = await requestLock("restore");
         if (response.status === 401 || response.status === 409) {
           if (!stopped) {
             setLockStatus("lost");
             setLockError("Another operator now owns the control lock. Reconnect to continue.");
-            setOperatorToken("");
+            setOperatorActive(false);
           }
           return;
         }
         if (!response.ok) throw new Error("The operator service is temporarily unavailable.");
         failures = 0;
         if (!stopped) {
-          setLockStatus("active");
-          setLockError("");
+          setLockStatus(operatorHydrated ? "active" : "reconnecting");
+          setLockError(operatorHydrated ? "" : "Operator lock is restored. Waiting for shared state before enabling controls…");
         }
       } catch {
         failures += 1;
@@ -349,33 +559,89 @@ export default function App() {
     }
 
     timer = window.setTimeout(renewLock, 10_000);
-    const releaseOnClose = () => {
-      apiFetch("/api/operator-lock", {
-        method: "POST", keepalive: true,
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
-        body: JSON.stringify({ action: "release", ownerId: operatorOwnerId })
-      }).catch(() => {});
+    return () => { stopped = true; window.clearTimeout(timer); };
+  }, [operatorActive, operatorHydrated, operatorOwnerId]);
+
+  // Only real input events refresh the idle deadline; polling and visibility
+  // changes deliberately do not count as operator activity.
+  useEffect(() => {
+    if (page !== "operator" || !operatorActive) return;
+    let lastAttempt = 0;
+    let timer;
+    let inFlight = false;
+    let pending = false;
+    const sendActivity = async () => {
+      timer = undefined;
+      if (inFlight) { pending = true; return; }
+      inFlight = true;
+      lastAttempt = Date.now();
+      try {
+        const response = await apiFetch("/api/operator-lock", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "activity", ownerId: operatorOwnerId }), cache: "no-store"
+        }, 8_000);
+        const data = await readJsonResponse(response);
+        if (response.status === 401 || response.status === 409) {
+          setOperatorActive(false); setLockStatus("lost");
+          setLockError(data.error || "Operator session expired. Enter the access token to reconnect.");
+        } else if (!response.ok) {
+          setLockError("Operator session activity could not sync yet; reconnecting automatically.");
+        } else {
+          setLockError("");
+        }
+      } catch { setLockError("Operator session activity could not sync yet; reconnecting automatically."); }
+      finally {
+        inFlight = false;
+        if (pending) { pending = false; scheduleActivity(); }
+      }
     };
-    window.addEventListener("pagehide", releaseOnClose);
-    return () => { stopped = true; window.clearTimeout(timer); window.removeEventListener("pagehide", releaseOnClose); };
-  }, [operatorToken, operatorOwnerId]);
+    const scheduleActivity = () => {
+      if (timer) clearTimeout(timer);
+      const wait = Math.max(350, 60_000 - (Date.now() - lastAttempt));
+      timer = window.setTimeout(sendActivity, wait);
+    };
+    const onInteraction = () => scheduleActivity();
+    window.addEventListener("pointerdown", onInteraction, { passive: true });
+    window.addEventListener("pointerup", onInteraction, { passive: true });
+    window.addEventListener("keydown", onInteraction);
+    window.addEventListener("touchstart", onInteraction, { passive: true });
+    window.addEventListener("input", onInteraction);
+    window.addEventListener("change", onInteraction);
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener("pointerdown", onInteraction);
+      window.removeEventListener("pointerup", onInteraction);
+      window.removeEventListener("keydown", onInteraction);
+      window.removeEventListener("touchstart", onInteraction);
+      window.removeEventListener("input", onInteraction);
+      window.removeEventListener("change", onInteraction);
+    };
+  }, [page, operatorActive, operatorOwnerId]);
 
   async function connectOperator() {
     const candidate = tokenInput.trim();
     if (!candidate) { setLockError("Enter the operator access token first."); return; }
     setLockError("");
     try {
+      const ownerId = crypto.randomUUID();
       const response = await apiFetch("/api/operator-lock", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + candidate },
-        body: JSON.stringify({ action: "acquire", ownerId: operatorOwnerId })
+        body: JSON.stringify({ action: "acquire", ownerId })
       });
-      const data = await response.json();
+      const data = await readJsonResponse(response);
       if (!response.ok) throw new Error(data.error || "Could not acquire operator lock.");
+      operatorRestoreGeneration.current += 1;
+      setTokenInput("");
+      setOperatorOwnerId(data.ownerId || ownerId);
+      setOperatorHydrated(false);
+      setOperatorActive(true);
+      setLockStatus("restoring");
+      setPublishError("");
       // Restore the last cloud state before this newly elected operator publishes.
-      const snapshotResponse = await apiFetch("/api/state", { cache: "no-store" });
-      if (!snapshotResponse.ok) throw new Error("Operator lock acquired, but the latest shared state could not be loaded. Try connecting again.");
-      const snapshot = await snapshotResponse.json();
+      const snapshotResponse = await apiFetch("/api/state", { cache: "no-store" }, 12_000);
+      const snapshot = await readJsonResponse(snapshotResponse);
+      if (!snapshotResponse.ok) throw new Error("Operator connected. Shared state is temporarily unavailable and will retry.");
       if (snapshot.state) {
         const saved = snapshot.state;
         if (saved.scene) setScene(normalizeScene(saved.scene));
@@ -392,8 +658,8 @@ export default function App() {
       }
       try {
         const sessionResponse = await apiFetch("/api/audience-session", {
-          method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + candidate },
-          body: JSON.stringify({ action: "status", ownerId: operatorOwnerId }), cache: "no-store"
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "status", ownerId: data.ownerId || ownerId }), cache: "no-store"
         });
         const sessionData = await readJsonResponse(sessionResponse);
         if (sessionResponse.ok) {
@@ -403,19 +669,37 @@ export default function App() {
       setAudienceSessionQr("");
         }
       } catch { /* The operator can retry session controls after connecting. */ }
-      setOperatorToken(candidate);
-      setLockStatus("active");
-      setPublishError("");
+      setLockError("");
     } catch (error) {
-      setOperatorToken("");
-      setLockStatus("blocked");
+      setTokenInput("");
+      if (!operatorActive) setLockStatus("blocked");
       setLockError(error.message);
     }
   }
 
+  async function logoutOperator() {
+    try {
+      const response = await apiFetch("/api/operator-lock", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "logout", ownerId: operatorOwnerId }), cache: "no-store"
+      }, 8_000);
+      if (!response.ok) throw new Error("The lock release could not be confirmed. It will expire automatically.");
+      operatorRestoreGeneration.current += 1;
+      setLockError("");
+    } catch (error) { setLockError(error.message); return; }
+    setOperatorActive(false);
+    setOperatorHydrated(false);
+    setOperatorOwnerId("");
+    setLockStatus("unlocked");
+    setAudienceSessionActive(false);
+    setAudienceSessionExpiresAt(null);
+    setAudienceSessionUrl("");
+    setAudienceSessionQr("");
+  }
+
   // Publish operator state only while this browser owns the server-side lock.
   useEffect(() => {
-    if (page !== "operator" || !operatorToken || lockStatus !== "active") return;
+    if (page !== "operator" || !operatorActive || !operatorHydrated || lockStatus !== "active") return;
     const timer = setTimeout(async () => {
       try {
         setPublishError("");
@@ -429,7 +713,7 @@ export default function App() {
         };
         const response = await apiFetch("/api/state", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ state, ownerId: operatorOwnerId })
         });
         if (!response.ok) {
@@ -441,7 +725,7 @@ export default function App() {
       } catch (error) { setPublishError(error.message); setSyncStatus("offline"); }
     }, 250);
     return () => clearTimeout(timer);
-  }, [page, operatorToken, operatorOwnerId, lockStatus, sensors, faults, espOnline, mode, scene, activeSource]);
+  }, [page, operatorActive, operatorHydrated, operatorOwnerId, lockStatus, sensors, faults, espOnline, mode, scene, activeSource]);
 
   useEffect(() => {
     if (page !== "feedback-admin" || lockStatus !== "active") return;
@@ -450,7 +734,7 @@ export default function App() {
       try {
         const response = await apiFetch("/api/feedback", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "list", ownerId: operatorOwnerId }),
           cache: "no-store"
         });
@@ -463,7 +747,7 @@ export default function App() {
     }
     loadFeedback();
     return () => { stopped = true; };
-  }, [page, lockStatus, operatorToken, operatorOwnerId]);
+  }, [page, lockStatus, operatorActive, operatorOwnerId]);
 
   useEffect(() => {
     const t = setInterval(() => setLastUpdate(new Date()), 5000);
@@ -500,7 +784,7 @@ export default function App() {
   async function operatorSessionRequest(action) {
     const response = await apiFetch("/api/audience-session", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, ownerId: operatorOwnerId }),
       cache: "no-store"
     });
@@ -652,7 +936,7 @@ export default function App() {
               </div>
 
               <div className="operator-access-card">
-                <div className="operator-access-row"><div><b>Operator connection</b><small>{lockStatus === "active" ? "This browser owns the control lock." : lockStatus === "reconnecting" ? "Reconnecting to the operator lock…" : "Connect to enable sensor and session controls."}</small></div>{lockStatus !== "active" && lockStatus !== "reconnecting" && <><input type="password" aria-label="Operator access token" placeholder="Operator token" value={tokenInput} onChange={e => setTokenInput(e.target.value)} /><button className="btn secondary" onClick={connectOperator}>Connect</button></>}</div>
+                <div className="operator-access-row"><div><b>Operator connection</b><small>{lockStatus === "active" ? "This browser owns the control lock." : lockStatus === "restoring" ? "Restoring the saved operator session…" : lockStatus === "reconnecting" ? "Reconnecting to the operator lock…" : "Connect to enable sensor and session controls."}</small></div>{lockStatus === "active" ? <button className="btn secondary" onClick={logoutOperator}>Log out</button> : lockStatus !== "reconnecting" && lockStatus !== "restoring" && <><input type="password" aria-label="Operator access token" placeholder="Operator token" value={tokenInput} onChange={e => setTokenInput(e.target.value)} /><button className="btn secondary" onClick={connectOperator}>Connect</button></>}</div>
                 {lockError && <p className="session-message" role="status">{lockError}</p>}
                 {publishError && <p className="session-message" role="status">{publishError}</p>}
                 <div className="audience-session-card">
@@ -693,4 +977,8 @@ export default function App() {
 
     <footer className="footer"><span>THEVA LIVE <i>·</i> EDUCATIONAL PROTOTYPE</span><span>Built to learn. Designed to protect.</span></footer>
   </div>;
+}
+
+export default function App() {
+  return window.location.pathname === "/display" ? <PublicDisplay/> : <ThevaApp/>;
 }

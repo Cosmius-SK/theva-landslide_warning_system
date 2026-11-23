@@ -1,5 +1,6 @@
 import { createSupabaseAdmin, redactServerSecrets } from "./supabase-admin.js";
 import { validateDemoState } from "../src/lib/contracts.js";
+import { verifyActiveOperator } from "./operator-session-utils.js";
 const headers = {
   "Access-Control-Allow-Origin": process.env.APP_ORIGIN || "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -22,21 +23,20 @@ export function createStateHandler({ admin: createAdmin = admin, env = process.e
         const validation = validateDemoState(data.state);
         if (!validation.valid) return res.status(503).json({ error: "Stored demonstration state is invalid." });
       }
-      return res.status(200).json({ configured:true, state:data?.state ?? null, updatedAt:data?.updated_at ?? null });
+      const { data: lock, error: lockError } = await db.from("operator_lock").select("session_hash,expires_at").eq("id", 1).maybeSingle();
+      if (lockError) throw lockError;
+      const operatorConnected = Boolean(lock?.session_hash && Date.parse(lock.expires_at) > now());
+      return res.status(200).json({ configured:true, state:data?.state ?? null, updatedAt:data?.updated_at ?? null, operatorConnected });
     }
     if (req.method === "POST") {
-      const expected = env.OPERATOR_ACCESS_TOKEN;
-      const supplied = (req.headers.authorization || "").replace(/^Bearer\s+/i,"");
-      if (!expected || !supplied || supplied !== expected) return res.status(401).json({error:"Operator access denied."});
       const state = req.body?.state;
       const ownerId = req.body?.ownerId;
       const validation = validateDemoState(state);
       if (!validation.valid || typeof ownerId !== "string" || !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(ownerId)) {
         return res.status(400).json({error:"Invalid state payload.", details:validation.errors});
       }
-      const { data: lock, error: lockError } = await db.from("operator_lock").select("owner_id,expires_at").eq("id",1).maybeSingle();
-      if (lockError) throw lockError;
-      if (!lock || lock.owner_id !== ownerId || new Date(lock.expires_at).getTime() <= now()) return res.status(409).json({error:"This operator console does not hold the active lock. Reconnect as the active operator."});
+      const operator = await verifyActiveOperator({ req, env, db, ownerId, now: now() });
+      if (!operator.ok) return res.status(operator.status).json({ error: operator.error });
       const { data, error } = await db.from("demo_state").upsert({id:1,state,updated_at:new Date(now()).toISOString()}).select("state,updated_at").single();
       if (error) throw error;
       return res.status(200).json({state:data.state,updatedAt:data.updated_at});

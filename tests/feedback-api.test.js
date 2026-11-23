@@ -2,9 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createFeedbackHandler } from "../api/feedback.js";
 import { hashAudienceToken } from "../api/audience-session-utils.js";
+import { createOperatorSession, hashOperatorSession } from "../api/operator-session-utils.js";
 
 const ownerId = "5d9a67a8-6d8a-45e0-b06d-634afe6b6613";
-const operatorToken = "operator-test-secret";
+const operatorEnv = { OPERATOR_ACCESS_TOKEN: "operator-test-secret" };
 const audienceToken = "a".repeat(43);
 const clock = Date.parse("2026-11-22T10:00:00.000Z");
 
@@ -12,10 +13,13 @@ function createDb({ active = true } = {}) {
   const rows = [];
   const tables = {
     audience_session: active ? { id: 1, token_hash: hashAudienceToken(audienceToken), expires_at: new Date(clock + 60_000).toISOString(), ended_at: null, started_at: new Date(clock).toISOString() } : null,
-    operator_lock: { id: 1, owner_id: ownerId, expires_at: new Date(clock + 60_000).toISOString() }
+    operator_lock: { id: 1, owner_id: ownerId, session_hash: "", expires_at: new Date(clock + 60_000).toISOString() }
   };
+  const operatorSession = createOperatorSession(ownerId, operatorEnv, clock);
+  tables.operator_lock.session_hash = hashOperatorSession(operatorSession.claims.sessionId);
   return {
     rows,
+    cookie: `theva_operator_session=${operatorSession.value}`,
     from(table) {
       let filter = {};
       let inserted = null;
@@ -36,8 +40,8 @@ function createDb({ active = true } = {}) {
   };
 }
 
-function invoke(handler, body, authorization = "") {
-  const req = { method: "POST", body, headers: authorization ? { authorization: `Bearer ${authorization}` } : {} };
+function invoke(handler, body, cookie = "") {
+  const req = { method: "POST", body, headers: cookie ? { cookie } : {} };
   const res = {
     statusCode: 200, headers: {},
     setHeader(name, value) { this.headers[name] = value; },
@@ -61,12 +65,12 @@ test("audience feedback requires a live server-validated token and persists boun
   assert.equal(oversized.statusCode, 400);
 });
 
-test("feedback retrieval requires the active operator lock and operator token", async () => {
+test("feedback retrieval requires the active operator lock and signed operator cookie", async () => {
   const db = createDb();
   db.rows.push({ id: "feedback-1", rating: 4, learning: "A little", comment: "Good" });
-  const handler = createFeedbackHandler({ admin: () => db, env: { OPERATOR_ACCESS_TOKEN: operatorToken }, now: () => clock });
-  assert.equal((await invoke(handler, { action: "list", ownerId }, "wrong")).statusCode, 401);
-  const listed = await invoke(handler, { action: "list", ownerId }, operatorToken);
+  const handler = createFeedbackHandler({ admin: () => db, env: operatorEnv, now: () => clock });
+  assert.equal((await invoke(handler, { action: "list", ownerId }, "theva_operator_session=invalid")).statusCode, 401);
+  const listed = await invoke(handler, { action: "list", ownerId }, db.cookie);
   assert.equal(listed.statusCode, 200);
   assert.equal(listed.body.feedback.length, 1);
 });

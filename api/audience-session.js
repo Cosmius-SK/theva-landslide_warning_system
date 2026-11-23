@@ -7,8 +7,7 @@ import {
   tokenMatchesHash
 } from "./audience-session-utils.js";
 import { validateDemoState } from "../src/lib/contracts.js";
-
-const ownerIdPattern = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
+import { verifyActiveOperator } from "./operator-session-utils.js";
 
 function createAdmin(env) {
   return createSupabaseAdmin(env);
@@ -40,14 +39,9 @@ export function createAudienceSessionHandler({ admin = () => createAdmin(process
         return res.status(200).json({ active: true, expiresAt: session.expires_at, state: current?.state ?? null, updatedAt: current?.updated_at ?? null });
       }
 
-      const expected = env.OPERATOR_ACCESS_TOKEN;
-      const supplied = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-      if (!expected || !supplied || supplied !== expected) return res.status(401).json({ error: "Operator access denied." });
       const ownerId = req.body?.ownerId;
-      if (!ownerIdPattern.test(ownerId || "")) return res.status(400).json({ error: "Invalid operator identity." });
-      const { data: lock, error: lockError } = await db.from("operator_lock").select("owner_id,expires_at").eq("id", 1).maybeSingle();
-      if (lockError) throw lockError;
-      if (!lock || lock.owner_id !== ownerId || Date.parse(lock.expires_at) <= now()) return res.status(409).json({ error: "This operator console does not hold the active lock." });
+      const operator = await verifyActiveOperator({ req, env, db, ownerId, now: now() });
+      if (!operator.ok) return res.status(operator.status).json({ error: operator.error });
 
       if (action === "status") {
         const { data: session, error } = await db.from("audience_session").select("expires_at,ended_at").eq("id", 1).maybeSingle();

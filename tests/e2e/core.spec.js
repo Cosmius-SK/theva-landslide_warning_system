@@ -35,6 +35,16 @@ test("operator, audience sessions, scene sync, feedback, and six viewport layout
   await page.getByLabel("Operator access token").fill("theva-e2e-operator-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByText("Operator connection")).toBeVisible();
+  await expect(page.getByRole("slider", { name: "Rainfall" })).toBeEnabled();
+  await page.reload();
+  await expect(page.locator(".operator-access-card > .operator-access-row small").first()).toHaveText("This browser owns the control lock.", { timeout: 15_000 });
+  await expect(page.getByRole("slider", { name: "Rainfall" })).toBeEnabled();
+  const browserStorage = await page.evaluate(() => `${Object.keys(localStorage).join(" ")} ${Object.keys(sessionStorage).join(" ")} ${document.cookie}`);
+  expect(browserStorage).not.toContain("theva_operator_session");
+  expect(browserStorage).not.toContain("theva-e2e-operator-token");
+  await request.get("/__test/advance?seconds=45");
+  await page.evaluate(() => { window.dispatchEvent(new Event("focus")); document.dispatchEvent(new Event("visibilitychange")); });
+  await expect(page.locator(".operator-access-card > .operator-access-row small").first()).toHaveText("This browser owns the control lock.", { timeout: 15_000 });
   let failedOneRenewal = false;
   await page.route("**/api/operator-lock", async route => {
     const body = route.request().postDataJSON();
@@ -213,4 +223,84 @@ test("operator, audience sessions, scene sync, feedback, and six viewport layout
   await request.get("/__test/advance?seconds=421");
   await audiencePage.reload();
   await expect(audiencePage.locator(".welcome-page")).toBeVisible();
+  await page.getByRole("button", { name: "End", exact: true }).click();
+  await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeVisible();
+});
+
+test("public display is read-only, follows shared state, and marks retained data stale", async ({ page }) => {
+  let unavailable = false;
+  let operatorConnected = true;
+  let shared = {
+    sensors: [
+      { id: "moisture", name: "Soil moisture", value: 22, healthy: true },
+      { id: "rainfall", name: "Rainfall", value: 18, healthy: true },
+      { id: "movement", name: "Ground movement", value: 12, healthy: true }
+    ], espOnline: true, source: "virtual", mode: "virtual", scene: "panorama"
+  };
+  let stamp = "2026-11-22T10:00:00.000Z";
+  await page.route("**/api/state", async route => {
+    if (unavailable) return route.abort("failed");
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ configured: true, state: shared, updatedAt: stamp, operatorConnected }) });
+  });
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto("/display");
+  await expect(page.locator(".display-risk h1")).toHaveText("Safe");
+  await expect(page.locator(".display-sensor")).toHaveCount(3);
+  await expect(page.getByText("EDUCATIONAL SIMULATION – NOT A REAL-WORLD LANDSLIDE WARNING SYSTEM")).toBeVisible();
+  await expect(page.getByRole("button")).toHaveCount(0);
+
+  shared = { ...shared, sensors: shared.sensors.map((sensor, index) => ({ ...sensor, value: index === 0 ? 80 : index === 1 ? 82 : sensor.value })) , scene: "slope_detail" };
+  stamp = "2026-11-22T10:01:00.000Z";
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.locator(".display-risk h1")).toHaveText("Evacuation");
+  await expect(page.locator(".display-scene-wrap .hill-visual-image")).toHaveAttribute("src", "/images/evacuation/evacuation_slope_detail.jpg");
+  const desktop = await noDocumentOverflow(page);
+  expect(desktop.vertical, `public display should fit one desktop screen: ${JSON.stringify(desktop)}`).toBe(true);
+  await page.screenshot({ path: "artifacts/ui-validation/public-display-desktop.png" });
+  await page.setViewportSize({ width: 1366, height: 768 });
+  const standardDesktop = await noDocumentOverflow(page);
+  expect(standardDesktop.vertical, `public display should fit one 1366x768 screen: ${JSON.stringify(standardDesktop)}`).toBe(true);
+  operatorConnected = false;
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.locator(".display-connection")).toContainText("OPERATOR OFFLINE");
+  await expect(page.locator(".display-risk h1")).toHaveText("Evacuation");
+  unavailable = true;
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(page.locator(".display-connection")).toContainText("CONNECTION LOST", { timeout: 10_000 });
+  await expect(page.locator(".display-risk h1")).toHaveText("Evacuation");
+
+  unavailable = false;
+  operatorConnected = true;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(page.locator(".display-connection")).toContainText("LIVE", { timeout: 10_000 });
+  await page.screenshot({ path: "artifacts/ui-validation/public-display-mobile.png" });
+  const mobile = await noDocumentOverflow(page);
+  expect(mobile.horizontal, `public display horizontal overflow on mobile: ${JSON.stringify(mobile)}`).toBe(true);
+});
+
+test("operator state changes reach the public display and logout is reflected there", async ({ browser }) => {
+  const operatorPage = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  await operatorPage.goto("/operator");
+  await operatorPage.getByLabel("Operator access token").fill("theva-e2e-operator-token");
+  await operatorPage.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(operatorPage.getByRole("slider", { name: "Rainfall" })).toBeEnabled();
+
+  const displayPage = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+  await displayPage.goto("/display");
+  await expect(displayPage.locator(".display-connection")).toContainText("LIVE", { timeout: 10_000 });
+  await setSensor(operatorPage, "Soil moisture", 60);
+  await setSensor(operatorPage, "Ground movement", 60);
+  await expect(operatorPage.locator(".operator-metrics .risk-level")).toHaveText("High");
+  await expect(displayPage.locator(".display-risk h1")).toHaveText("High", { timeout: 15_000 });
+  await expect(displayPage.locator(".display-sensor").filter({ hasText: "Soil moisture" })).toContainText("60%");
+  await operatorPage.getByRole("group", { name: "Choose hillside scene view" }).getByRole("button", { name: "Hillside home" }).click();
+  await expect(displayPage.locator(".display-scene-wrap .hill-visual-image")).toHaveAttribute("src", "/images/high/high_hillside_home.jpg", { timeout: 15_000 });
+
+  await operatorPage.getByRole("button", { name: "Log out", exact: true }).click();
+  await expect(operatorPage.getByRole("button", { name: "Connect", exact: true })).toBeVisible();
+  await expect(displayPage.locator(".display-connection")).toContainText("OPERATOR OFFLINE", { timeout: 15_000 });
+  await displayPage.close();
+  await operatorPage.close();
 });

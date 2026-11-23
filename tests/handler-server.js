@@ -65,21 +65,21 @@ const memoryAdmin = {
     };
     return query;
   },
-  async rpc(name, { p_owner: ownerId }) {
+  async rpc(name, { p_owner: ownerId, p_session_hash: sessionHash, p_new_session: isNewSession }) {
     const current = tables.operator_lock;
     if (name === "acquire_operator_lock") {
-      const available = !current || Date.parse(current.expires_at) <= clock || current.owner_id === ownerId;
-      if (available) tables.operator_lock = { id: 1, owner_id: ownerId, expires_at: new Date(clock + 30_000).toISOString() };
+      const available = (!current && isNewSession) || (current && ((isNewSession && Date.parse(current.expires_at) <= clock) || (current.owner_id === ownerId && current.session_hash === sessionHash)));
+      if (available) tables.operator_lock = { id: 1, owner_id: ownerId, session_hash: sessionHash, expires_at: new Date(clock + 30_000).toISOString() };
       return { data: available, error: null };
     }
     if (name === "renew_operator_lock") {
-      const valid = current?.owner_id === ownerId && Date.parse(current.expires_at) > clock;
+      const valid = current?.owner_id === ownerId && current?.session_hash === sessionHash && Date.parse(current.expires_at) > clock;
       if (valid) current.expires_at = new Date(clock + 30_000).toISOString();
       return { data: Boolean(valid), error: null };
     }
     if (name === "release_operator_lock") {
-      const valid = current?.owner_id === ownerId;
-      if (valid) current.expires_at = new Date(clock).toISOString();
+      const valid = current?.owner_id === ownerId && current?.session_hash === sessionHash;
+      if (valid) { current.expires_at = new Date(clock).toISOString(); current.session_hash = null; }
       return { data: Boolean(valid), error: null };
     }
     return { data: null, error: new Error("Unknown test RPC") };

@@ -1,11 +1,10 @@
 import { createSupabaseAdmin, redactServerSecrets } from "./supabase-admin.js";
 import { isAudienceSessionActive, tokenMatchesHash } from "./audience-session-utils.js";
+import { verifyActiveOperator } from "./operator-session-utils.js";
 
 function createAdmin(env) {
   return createSupabaseAdmin(env);
 }
-
-const ownerIdPattern = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
 
 export function createFeedbackHandler({ admin = () => createAdmin(process.env), env = process.env, now = () => Date.now() } = {}) {
   return async function handler(req, res) {
@@ -41,16 +40,9 @@ export function createFeedbackHandler({ admin = () => createAdmin(process.env), 
       }
 
       if (action === "list") {
-        const supplied = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
         const ownerId = req.body?.ownerId;
-        if (!env.OPERATOR_ACCESS_TOKEN || supplied !== env.OPERATOR_ACCESS_TOKEN || !ownerIdPattern.test(ownerId || "")) {
-          return res.status(401).json({ error: "Operator access denied." });
-        }
-        const { data: lock, error: lockError } = await db.from("operator_lock").select("owner_id,expires_at").eq("id", 1).maybeSingle();
-        if (lockError) throw lockError;
-        if (!lock || lock.owner_id !== ownerId || Date.parse(lock.expires_at) <= now()) {
-          return res.status(409).json({ error: "This operator console does not hold the active lock." });
-        }
+        const operator = await verifyActiveOperator({ req, env, db, ownerId, now: now() });
+        if (!operator.ok) return res.status(operator.status).json({ error: operator.error });
         const { data, error } = await db.from("audience_feedback").select("id,created_at,rating,learning,comment").order("created_at", { ascending: false }).limit(200);
         if (error) throw error;
         return res.status(200).json({ feedback: data || [] });

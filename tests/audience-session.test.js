@@ -2,13 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createAudienceSessionHandler } from "../api/audience-session.js";
 import { hashAudienceToken, isAudienceSessionActive, tokenMatchesHash } from "../api/audience-session-utils.js";
+import { createOperatorSession, hashOperatorSession } from "../api/operator-session-utils.js";
 
 const ownerId = "5d9a67a8-6d8a-45e0-b06d-634afe6b6613";
-const operatorToken = "operator-test-secret";
+const env = { OPERATOR_ACCESS_TOKEN: "operator-test-secret" };
 
 function createMemoryDb(now) {
   const tables = {
-    operator_lock: { id: 1, owner_id: ownerId, expires_at: new Date(now() + 30_000).toISOString() },
+    operator_lock: { id: 1, owner_id: ownerId, session_hash: "", expires_at: new Date(now() + 30_000).toISOString() },
     audience_session: null,
     demo_state: { id: 1, state: { sensors: [{ id: "moisture", value: 22, healthy: true }, { id: "rainfall", value: 35, healthy: true }, { id: "movement", value: 12, healthy: true }], espOnline: false, source: "virtual-fallback", mode: "auto", scene: "panorama" }, updated_at: new Date(now()).toISOString() }
   };
@@ -50,8 +51,12 @@ function responseRecorder() {
   };
 }
 
-function request(handler, { action, token, auth, owner = ownerId }) {
-  const req = { method: "POST", body: { action, token, ownerId: owner }, headers: auth ? { authorization: `Bearer ${auth}` } : {} };
+function makeOperatorCookie(now) {
+  const session = createOperatorSession(ownerId, env, now);
+  return { cookie: `theva_operator_session=${session.value}`, hash: hashOperatorSession(session.claims.sessionId) };
+}
+function request(handler, { action, token, cookie, owner = ownerId }) {
+  const req = { method: "POST", body: { action, token, ownerId: owner }, headers: cookie ? { cookie } : {} };
   const res = responseRecorder();
   return handler(req, res).then(() => res);
 }
@@ -59,10 +64,12 @@ function request(handler, { action, token, auth, owner = ownerId }) {
 test("valid audience links restore latest state and keep their original expiry", async () => {
   let clock = Date.parse("2026-11-22T10:00:00.000Z");
   const db = createMemoryDb(() => clock);
+  const operator = makeOperatorCookie(clock);
+  db.tables.operator_lock.session_hash = operator.hash;
   const token = "a".repeat(43);
-  const handler = createAudienceSessionHandler({ admin: () => db, env: { OPERATOR_ACCESS_TOKEN: operatorToken }, now: () => clock, makeToken: () => token });
+  const handler = createAudienceSessionHandler({ admin: () => db, env, now: () => clock, makeToken: () => token });
 
-  const started = await request(handler, { action: "start", auth: operatorToken });
+  const started = await request(handler, { action: "start", cookie: operator.cookie });
   assert.equal(started.statusCode, 201);
   assert.equal(started.body.token, token);
   assert.notEqual(db.tables.audience_session.token_hash, token);
@@ -84,11 +91,13 @@ test("valid audience links restore latest state and keep their original expiry",
 test("invalid, expired, and operator-ended audience links are rejected", async () => {
   let clock = Date.parse("2026-11-22T10:00:00.000Z");
   const db = createMemoryDb(() => clock);
+  const operator = makeOperatorCookie(clock);
+  db.tables.operator_lock.session_hash = operator.hash;
   const token = "b".repeat(43);
-  const handler = createAudienceSessionHandler({ admin: () => db, env: { OPERATOR_ACCESS_TOKEN: operatorToken }, now: () => clock, makeToken: () => token });
+  const handler = createAudienceSessionHandler({ admin: () => db, env, now: () => clock, makeToken: () => token });
 
   assert.equal((await request(handler, { action: "validate", token })).statusCode, 401);
-  const started = await request(handler, { action: "start", auth: operatorToken });
+  const started = await request(handler, { action: "start", cookie: operator.cookie });
   assert.equal(started.statusCode, 201);
   assert.equal((await request(handler, { action: "validate", token: "wrong-session-token-value-123456" })).statusCode, 401);
 
@@ -97,9 +106,9 @@ test("invalid, expired, and operator-ended audience links are rejected", async (
 
   clock = Date.parse("2026-11-22T10:01:00.000Z");
   db.tables.operator_lock.expires_at = new Date(clock + 30_000).toISOString();
-  const next = await request(handler, { action: "start", auth: operatorToken });
+  const next = await request(handler, { action: "start", cookie: operator.cookie });
   assert.equal(next.statusCode, 201);
-  assert.equal((await request(handler, { action: "end", auth: operatorToken })).body.active, false);
+  assert.equal((await request(handler, { action: "end", cookie: operator.cookie })).body.active, false);
   assert.equal((await request(handler, { action: "validate", token })).statusCode, 410);
 });
 
