@@ -297,22 +297,58 @@ export default function App() {
 
   // Keep the server-side operator lease alive while this console is active.
   useEffect(() => {
-    if (!operatorToken || lockStatus !== "active") return;
+    if (!operatorToken) return;
+    let stopped = false;
+    let inFlight = false;
+    let failures = 0;
+    let timer;
+    const requestLock = (action) => apiFetch("/api/operator-lock", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
+      body: JSON.stringify({ action, ownerId: operatorOwnerId })
+    }, 12_000);
+
     async function renewLock() {
+      if (stopped || inFlight) return;
+      inFlight = true;
       try {
-        const response = await apiFetch("/api/operator-lock", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + operatorToken },
-          body: JSON.stringify({ action: "renew", ownerId: operatorOwnerId })
-        });
-        if (!response.ok) throw new Error("Operator lock lost. This console is now read-only; another operator may have taken over.");
-      } catch (error) {
-        setLockStatus("lost");
-        setLockError(error.message);
-        setOperatorToken("");
+        let response = await requestLock("renew");
+        if (response.status === 401) {
+          if (!stopped) {
+            setLockStatus("lost");
+            setLockError("Operator authorization was rejected. Reconnect to continue.");
+            setOperatorToken("");
+          }
+          return;
+        }
+        if (response.status === 409) response = await requestLock("acquire");
+        if (response.status === 401 || response.status === 409) {
+          if (!stopped) {
+            setLockStatus("lost");
+            setLockError("Another operator now owns the control lock. Reconnect to continue.");
+            setOperatorToken("");
+          }
+          return;
+        }
+        if (!response.ok) throw new Error("The operator service is temporarily unavailable.");
+        failures = 0;
+        if (!stopped) {
+          setLockStatus("active");
+          setLockError("");
+        }
+      } catch {
+        failures += 1;
+        if (!stopped) {
+          setLockStatus("reconnecting");
+          setLockError("Connection interrupted. Reconnecting to the operator lock; controls are temporarily paused.");
+        }
+      } finally {
+        inFlight = false;
+        if (!stopped) timer = window.setTimeout(renewLock, failures ? Math.min(5_000, 1_000 + failures * 1_000) : 10_000);
       }
     }
-    const timer = window.setInterval(renewLock, 10000);
+
+    timer = window.setTimeout(renewLock, 10_000);
     const releaseOnClose = () => {
       apiFetch("/api/operator-lock", {
         method: "POST", keepalive: true,
@@ -321,8 +357,8 @@ export default function App() {
       }).catch(() => {});
     };
     window.addEventListener("pagehide", releaseOnClose);
-    return () => { window.clearInterval(timer); window.removeEventListener("pagehide", releaseOnClose); };
-  }, [operatorToken, lockStatus, operatorOwnerId]);
+    return () => { stopped = true; window.clearTimeout(timer); window.removeEventListener("pagehide", releaseOnClose); };
+  }, [operatorToken, operatorOwnerId]);
 
   async function connectOperator() {
     const candidate = tokenInput.trim();
@@ -616,7 +652,7 @@ export default function App() {
               </div>
 
               <div className="operator-access-card">
-                <div className="operator-access-row"><div><b>Operator connection</b><small>{lockStatus === "active" ? "This browser owns the control lock." : "Connect to enable sensor and session controls."}</small></div>{lockStatus !== "active" && <><input type="password" aria-label="Operator access token" placeholder="Operator token" value={tokenInput} onChange={e => setTokenInput(e.target.value)} /><button className="btn secondary" onClick={connectOperator}>Connect</button></>}</div>
+                <div className="operator-access-row"><div><b>Operator connection</b><small>{lockStatus === "active" ? "This browser owns the control lock." : lockStatus === "reconnecting" ? "Reconnecting to the operator lock…" : "Connect to enable sensor and session controls."}</small></div>{lockStatus !== "active" && lockStatus !== "reconnecting" && <><input type="password" aria-label="Operator access token" placeholder="Operator token" value={tokenInput} onChange={e => setTokenInput(e.target.value)} /><button className="btn secondary" onClick={connectOperator}>Connect</button></>}</div>
                 {lockError && <p className="session-message" role="status">{lockError}</p>}
                 {publishError && <p className="session-message" role="status">{publishError}</p>}
                 <div className="audience-session-card">

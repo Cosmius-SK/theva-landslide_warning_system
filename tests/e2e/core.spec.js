@@ -35,6 +35,21 @@ test("operator, audience sessions, scene sync, feedback, and six viewport layout
   await page.getByLabel("Operator access token").fill("theva-e2e-operator-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByText("Operator connection")).toBeVisible();
+  let failedOneRenewal = false;
+  await page.route("**/api/operator-lock", async route => {
+    const body = route.request().postDataJSON();
+    if (body.action === "renew" && !failedOneRenewal) {
+      failedOneRenewal = true;
+      return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Operator lock service unavailable." }) });
+    }
+    return route.continue();
+  });
+  const operatorStatus = page.locator(".operator-access-card > .operator-access-row small").first();
+  await expect(operatorStatus).toHaveText(/Reconnecting to the operator lock/, { timeout: 15_000 });
+  await expect(operatorStatus).toHaveText("This browser owns the control lock.", { timeout: 5_000 });
+  await expect(page.getByRole("slider", { name: "Rainfall" })).toBeEnabled();
+  expect(failedOneRenewal).toBe(true);
+  await page.unroute("**/api/operator-lock");
   await expect(page.locator(".operator-metrics .risk-level")).toHaveText("Safe");
   await page.getByLabel("Operating mode").selectOption("hardware");
   await expect(page.locator(".operator-metrics .risk-level")).toHaveText("Unavailable");
