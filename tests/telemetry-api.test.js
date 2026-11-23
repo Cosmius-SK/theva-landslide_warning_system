@@ -84,6 +84,24 @@ test("telemetry API authenticates, persists simulated readings, and exposes devi
   assert.deepEqual(Object.keys(live.body.telemetry).sort(), ["deviceId", "label", "online", "readings", "receivedAt", "sequence"]);
 });
 
+test("device tokens accept the allowed 43-character Base64URL endings and reject other endings", async () => {
+  for (const finalCharacter of "AEIMQUYcgkosw048") {
+    const token = `${"A".repeat(42)}${finalCharacter}`;
+    const handler = createTelemetryHandler({ admin: database, env: { ...env, TELEMETRY_DEVICE_TOKEN: token }, now: () => now });
+    const response = await invoke(handler, { authorization: `Bearer ${token}` });
+    assert.equal(response.statusCode, 200, `expected final character ${finalCharacter} to be accepted`);
+  }
+
+  for (const finalCharacter of ["B", "Z", "_"]) {
+    const token = `${"A".repeat(42)}${finalCharacter}`;
+    let adminCalls = 0;
+    const handler = createTelemetryHandler({ admin: () => { adminCalls++; return database(); }, env: { ...env, TELEMETRY_DEVICE_TOKEN: token }, now: () => now });
+    const response = await invoke(handler, { authorization: `Bearer ${token}` });
+    assert.equal(response.statusCode, 503, `expected final character ${finalCharacter} to be rejected as configuration`);
+    assert.equal(adminCalls, 0);
+  }
+});
+
 test("telemetry API rejects malformed, stale, mismatched-device, and out-of-order payloads", async () => {
   const db = database();
   const handler = createTelemetryHandler({ admin: () => db, env, now: () => now });

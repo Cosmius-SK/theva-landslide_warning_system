@@ -82,7 +82,7 @@ export function createTelemetryHandler({ admin = () => createSupabaseAdmin(proce
       return res.status(405).json({ error: "Method not allowed." });
     }
 
-    if (!env.TELEMETRY_DEVICE_ID || typeof env.TELEMETRY_DEVICE_TOKEN !== "string" || !/^[A-Za-z0-9_-]{42}[AQgw]$/.test(env.TELEMETRY_DEVICE_TOKEN)) {
+    if (!env.TELEMETRY_DEVICE_ID || typeof env.TELEMETRY_DEVICE_TOKEN !== "string" || !/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/.test(env.TELEMETRY_DEVICE_TOKEN)) {
       return res.status(503).json({ error: "Device telemetry is not configured." });
     }
     if (!secretsMatch(bearerToken(req), env.TELEMETRY_DEVICE_TOKEN)) {
