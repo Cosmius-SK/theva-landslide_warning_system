@@ -302,17 +302,38 @@ test("public display shows authenticated simulated ESP32 telemetry and device of
   expect(sent.status).toBe(200);
   expect(sent.body.accepted).toBe(true);
 
+  await page.goto("/operator");
+  await page.getByLabel("Operator access token").fill("theva-e2e-operator-token");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.locator(".status-strip > div b")).toHaveText("ESP32 DEVICE");
+  await expect(page.locator(".operator-metrics .risk-level")).toHaveText("Watch");
+  await expect(page.locator(".operator-source-note")).toContainText("ESP32 DEVICE · SIMULATED TEST ONLY");
+  await expect(page.locator(".hill-scene-head .simulated-test-label")).toBeVisible();
+
   await page.goto("/display");
   const device = page.getByRole("region", { name: "ESP32 device telemetry" });
   await expect(device.getByText("DEVICE ONLINE")).toBeVisible();
   await expect(device.getByText("SIMULATED TEST ONLY").first()).toBeVisible();
   await expect(device.locator(".device-telemetry-meta span").nth(1)).toContainText("Sequence1");
   await expect(device.getByText("35%", { exact: true })).toBeVisible();
+  await expect(page.locator(".display-meta")).toContainText("Input modeESP32 DEVICE");
+  await expect(page.locator(".display-risk h1")).toHaveText("Watch");
+  await expect(page.locator(".display-sensor").filter({ hasText: "Soil moisture" })).toContainText("22%");
+  await expect(page.locator(".display-sensor").filter({ hasText: "Rainfall" })).toContainText("35%");
+  await expect(page.locator(".display-sensor").filter({ hasText: "Ground movement" })).toContainText("4%");
+  await expect(page.locator(".display-sensor").filter({ hasText: "Rainfall" })).toContainText("SIMULATED TEST ONLY");
+  await expect(page.locator(".hill-visual-image")).toHaveAttribute("alt", /Model state: Watch\. Rainfall 35%; soil moisture 22%; ground movement 4%\./);
+  await expect(page.locator(".hill-scene-head .simulated-test-label")).toHaveText("ESP32 DEVICE · SIMULATED TEST ONLY");
 
   await page.evaluate(() => fetch("/__test/advance?seconds=46"));
   await page.reload();
   await expect(device.getByText("DEVICE OFFLINE")).toBeVisible();
   await expect(device.getByText("35%", { exact: true })).toBeVisible();
+  await expect(page.locator(".display-meta")).toContainText("Input modeAUTOMATIC VIRTUAL FALLBACK");
+  await expect(page.locator(".display-risk h1")).toHaveText("Safe");
+  await expect(page.locator(".display-sensor").filter({ hasText: "Rainfall" })).toContainText("18%");
+  await expect(page.locator(".display-sensor").filter({ hasText: "Ground movement" })).toContainText("12%");
+  await expect(page.locator(".hill-visual-image")).toHaveAttribute("alt", /Model state: Safe\. Rainfall 18%; soil moisture 22%; ground movement 12%\./);
 });
 
 test("operator state changes reach the public display and logout is reflected there", async ({ browser }) => {
