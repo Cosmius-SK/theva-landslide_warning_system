@@ -255,7 +255,7 @@ function PublicDisplay() {
     : initialSensors.map(sensor => ({ ...sensor, failed: true }));
   const deviceReadings = freshDeviceReadings(deviceTelemetry);
   const virtualOverrideActive = state?.mode === "virtual" || state?.source === "virtual";
-  const autoSimulationActive = operatorConnected === false && !deviceReadings && !virtualOverrideActive && state?.mode !== "hardware";
+  const autoSimulationActive = !deviceReadings && !virtualOverrideActive && state?.mode !== "hardware";
   useEffect(() => {
     if (!autoSimulationActive) return;
     const timer = window.setInterval(() => setSimulationTick(tick => tick + 1), 5_000);
