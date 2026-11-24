@@ -38,7 +38,7 @@ Supabase RLS allows public reads of demonstration state only. Browser clients ca
 - **Safe:** otherwise.
 - **Unavailable:** no healthy inputs.
 
-The UI keeps individual sensor faults separate from environmental risk. Automatic uses the virtual fallback and Virtual override uses simulated values. Hardware-only continues to report unavailable model inputs; the ESP32 test feed is shown separately on `/display` and Diagnostics and does not change risk thresholds or virtual controls. Every device-generated reading is labelled **SIMULATED TEST ONLY**. The operator heartbeat toggle remains a simulation control and does not indicate a physical connection.
+The UI keeps individual sensor faults separate from environmental risk. The default source uses fresh ESP32 telemetry when online; the three sliders mirror those values and remain read-only. If telemetry is unavailable or stale, the dashboard uses its automatic virtual fallback. Selecting **Virtual override** enables manual simulated readings, which drive the model, risk indication, cinematic scene, and synced audience/public views. Switching back returns to fresh device data or the fallback. Existing risk thresholds are unchanged. Every device-generated reading is labelled **SIMULATED TEST ONLY**. The operator heartbeat toggle remains a simulation control and does not indicate a physical connection.
 
 See the [ESP32 telemetry contract](docs/HARDWARE_INTEGRATION.md) and [Preview setup and flashing guide](docs/ESP32_TELEMETRY_SETUP.md). Local tests use mocked persistence; physical integration is not claimed until an ESP32 packet appears on the Preview dashboard.
 

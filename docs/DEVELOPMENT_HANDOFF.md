@@ -1,5 +1,7 @@
 # Theva Live — Development Handoff
 
+> **Historical snapshot:** the implementation inventory and blocker statements below describe an earlier branch state and are no longer current. For the active ESP32 telemetry branch, use [Codex handoff](CODEX_HANDOFF.md), [laptop setup](LAPTOP_SETUP.md), and [ESP32 telemetry setup](ESP32_TELEMETRY_SETUP.md). Do not use the old “no firmware/API” status below as current.
+
 ## Branch and baseline
 
 - Working branch: `development/esp32-telemetry`.

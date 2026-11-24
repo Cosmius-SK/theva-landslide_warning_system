@@ -1,6 +1,6 @@
 # ESP32-S3 simulated telemetry setup
 
-This phase sends generated values from an ESP32-S3 to the development dashboard. Every generated reading is labelled **SIMULATED TEST ONLY**. They are not potentiometer measurements or calibrated warning inputs, and they never enter the risk calculation.
+This phase sends generated values from an ESP32-S3 to the development dashboard. Every generated reading is labelled **SIMULATED TEST ONLY**; they are not potentiometer measurements or calibrated engineering units. Fresh device values are the default model input and feed the existing risk thresholds. The operator can select **Virtual override** to use the manual sliders; switching back uses fresh device values or the automatic virtual fallback if the device is stale/offline.
 
 ## Preview configuration and isolation
 
@@ -23,7 +23,7 @@ Generate a token locally in PowerShell (copy its output directly into server-sid
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
 ```
 
-The endpoint format is `https://<Preview deployment host>/api/telemetry`. `POST` requires `Authorization: Bearer <device token>` and the configured device ID. `GET /api/telemetry` returns only the configured device ID, sequence, last received time, readings, online flag, and fixed simulated label. The function allows a 2 KiB payload and calls a persistent database token bucket (12 request burst, refilling at 12/minute); the bucket RPC and least-privilege grants are prepared in [device telemetry hardening SQL](../supabase/device_telemetry_hardening.sql). This SQL has **not** been applied. After reviewing it, an authorized operator must apply it to Preview project `qgmvlsgzpvqabiupmnki` before the route can accept packets. Do not run it against Production.
+The endpoint format is `https://<Preview deployment host>/api/telemetry`. `POST` requires `Authorization: Bearer <device token>` and the configured device ID. `GET /api/telemetry` returns only the configured device ID, sequence, last received time, readings, online flag, and fixed simulated label. The function allows a 2 KiB payload and calls a persistent database token bucket (12 request burst, refilling at 12/minute); the bucket RPC and least-privilege grants are prepared in [device telemetry hardening SQL](../supabase/device_telemetry_hardening.sql). The migration's current Preview application status was not verified during this handoff. Confirm that its RPCs exist before physical testing; if they are missing, an authorized operator must review and apply the SQL to Preview project `qgmvlsgzpvqabiupmnki`. Never run it against Production.
 
 The existing `ingest_device_telemetry` RPC remains the atomic sequence gate: only a strictly increasing sequence is stored. RLS remains enabled and browser roles have no table or RPC access. The service-role key is used only by server-side API code.
 
@@ -94,3 +94,7 @@ The matching Arduino IDE board options are **ESP32S3 Dev Module**, **Flash Size:
 7. Power off the board or disable Wi-Fi and wait **more than 45 seconds**. The panel should show **DEVICE OFFLINE**, retaining the last reading and timestamp. Restore Wi-Fi; confirm reconnect, a higher accepted sequence and online status.
 
 Automated tests use a local in-memory Supabase double and source assertions; they cannot prove Preview persistence or a physical packet. No physical integration success is claimed until steps 4–5 are observed.
+
+## Serial startup status
+
+The operator reports that serial startup and monitoring were working during the morning hardware test, with no errors. There is no current unresolved serial-monitor issue or recorded corrective workaround. Board checks previously reported as passing include ESP32-S3 detection, flash, OPI PSRAM, memory read/write, Wi-Fi, and Internet TCP connectivity. These checks do not by themselves prove that a fresh firmware packet reached the Preview dashboard; use the packet verification steps above. If serial output stops on the office laptop, select the detected COM port, use **115200 baud**, open the monitor and press RESET; close the monitor before upload. If upload mode is needed, hold BOOT, tap RESET, release BOOT, and retry. Record the exact output before changing firmware or TLS settings.

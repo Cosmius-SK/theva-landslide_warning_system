@@ -384,6 +384,8 @@ test("public display shows authenticated simulated ESP32 telemetry and device of
   await expect(displayPage.locator(".display-risk h1")).toHaveText("High");
   await expect(displayPage.locator(".display-sensor").filter({ hasText: "Rainfall" })).toContainText("80%");
   await expect(displayPage.locator(".hill-visual-image")).toHaveAttribute("alt", /Model state: High\. Rainfall 80%; soil moisture 10%; ground movement 20%\./);
+  await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeVisible();
 });
 
 test("operator state changes reach the public display and logout is reflected there", async ({ browser }) => {
