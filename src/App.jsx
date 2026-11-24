@@ -6,6 +6,7 @@ import { assess } from "./lib/risk";
 import { normalizeScene, SCENE_VIEWS, sceneImagePath } from "./lib/scenes";
 import { isCurrentOrNewerUpdate } from "./lib/shared-state";
 import { apiFetch } from "./lib/api-fetch";
+import { simulateSlopeReadings } from "./lib/simulation";
 
 const initialSensors = [
   { id: "moisture", name: "Soil moisture", unit: "Moisture", value: 22, icon: Droplets, description: "Water saturation in the slope" },
