@@ -6,11 +6,11 @@ create table if not exists public.operator_lock (
   updated_at timestamptz not null default now()
 );
 alter table public.operator_lock enable row level security;
-revoke all on public.operator_lock from anon, authenticated;
-grant all on public.operator_lock to service_role;
+revoke all on public.operator_lock from public, anon, authenticated, service_role;
+grant select on public.operator_lock to service_role;
 
 create or replace function public.acquire_operator_lock(p_owner uuid)
-returns boolean language plpgsql security definer set search_path = public as $$
+returns boolean language plpgsql security definer set search_path = pg_catalog, public as $$
 declare affected_rows integer;
 begin
   insert into public.operator_lock(id, owner_id, expires_at, updated_at)
@@ -27,7 +27,7 @@ end;
 $$;
 
 create or replace function public.renew_operator_lock(p_owner uuid)
-returns boolean language plpgsql security definer set search_path = public as $$
+returns boolean language plpgsql security definer set search_path = pg_catalog, public as $$
 declare affected_rows integer;
 begin
   update public.operator_lock
@@ -39,7 +39,7 @@ end;
 $$;
 
 create or replace function public.release_operator_lock(p_owner uuid)
-returns boolean language plpgsql security definer set search_path = public as $$
+returns boolean language plpgsql security definer set search_path = pg_catalog, public as $$
 declare affected_rows integer;
 begin
   update public.operator_lock
