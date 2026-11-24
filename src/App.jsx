@@ -184,6 +184,7 @@ function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience 
 
 function PublicDisplay() {
   const [state, setState] = useState(null);
+  const [simulationTick, setSimulationTick] = useState(0);
   const [updatedAt, setUpdatedAt] = useState(null);
   const [operatorConnected, setOperatorConnected] = useState(null);
   const [connection, setConnection] = useState("connecting");
@@ -253,13 +254,23 @@ function PublicDisplay() {
     : initialSensors.map(sensor => ({ ...sensor, failed: true }));
   const deviceReadings = freshDeviceReadings(deviceTelemetry);
   const virtualOverrideActive = state?.mode === "virtual" || state?.source === "virtual";
+  const autoSimulationActive = operatorConnected === false && !deviceReadings && !virtualOverrideActive && state?.mode !== "hardware";
+  useEffect(() => {
+    if (!autoSimulationActive) return;
+    const timer = window.setInterval(() => setSimulationTick(tick => tick + 1), 5_000);
+    return () => window.clearInterval(timer);
+  }, [autoSimulationActive]);
+  const simulatedReadings = simulateSlopeReadings(simulationTick);
   const modelDeviceReadings = virtualOverrideActive ? null : deviceReadings;
-  const sensors = withDeviceReadings(sharedSensors, modelDeviceReadings);
-  const risk = assess(modelDeviceReadings
-    ? Object.values(modelDeviceReadings)
+  const sensors = autoSimulationActive
+    ? sharedSensors.map(sensor => ({ ...sensor, value: simulatedReadings[sensor.id], failed: false }))
+    : withDeviceReadings(sharedSensors, modelDeviceReadings);
+  const effectiveReadings = autoSimulationActive ? simulatedReadings : modelDeviceReadings;
+  const risk = assess(effectiveReadings
+    ? Object.values(effectiveReadings)
     : state?.sensors?.filter(sensor => sensor.healthy === true).map(sensor => Number(sensor.value)) || []);
   const scene = normalizeScene(state?.scene || "panorama");
-  const sourceLabel = modelDeviceReadings ? "ESP32 DEVICE" : virtualOverrideActive ? "VIRTUAL OVERRIDE" : "AUTOMATIC VIRTUAL FALLBACK";
+  const sourceLabel = effectiveReadings ? (autoSimulationActive ? "AUTOMATIC VIRTUAL SIMULATION · SIMULATED TEST ONLY" : "ESP32 DEVICE") : virtualOverrideActive ? "VIRTUAL OVERRIDE" : "AUTOMATIC VIRTUAL FALLBACK";
   const educationalAction = risk.level === "Evacuation" || risk.level === "High"
     ? "In this model, move to the safe area shown by your teacher and discuss which readings changed."
     : risk.level === "Watch"
@@ -291,7 +302,8 @@ function PublicDisplay() {
           <i className={`dot ${sensor.failed ? "offline" : "online"}`}/><div><b>{sensor.name}</b><small>{sensor.failed ? "Unavailable" : modelDeviceReadings ? "ESP32 DEVICE · SIMULATED TEST ONLY" : virtualOverrideActive ? "VIRTUAL OVERRIDE · SIMULATED TEST ONLY" : "Simulation input · monitoring"}</small></div><strong>{sensor.failed ? "—" : `${sensor.value}%`}</strong>
         </article>)}</div>
         <div className="display-meta"><span><b>Input mode</b>{sourceLabel}</span><span><b>Last update</b>{updatedAt ? new Date(updatedAt).toLocaleString() : "No shared update received"}</span><span><b>Synchronization</b>{connectionText}</span></div>
-        <DeviceTelemetryPanel deviceTelemetry={deviceTelemetry}/>
+        {!autoSimulationActive && <DeviceTelemetryPanel deviceTelemetry={deviceTelemetry}/>}
+        {autoSimulationActive && <div className="simulated-test-label public-simulation-label">AUTOMATIC VIRTUAL SIMULATION · VALUES CHANGE EVERY 5 SECONDS · SIMULATED TEST ONLY</div>}
       </aside>
     </div>
     <footer className="display-disclaimer">EDUCATIONAL SIMULATION – NOT A REAL-WORLD LANDSLIDE WARNING SYSTEM</footer>
