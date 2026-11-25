@@ -22,8 +22,11 @@ export function getAudioAlertForTransition(previous, next) {
 
 let activeContext = null;
 let activeOscillators = [];
+let alertTimer = null;
 
 export function stopAudioAlert() {
+  if (typeof window !== "undefined" && alertTimer !== null) window.clearTimeout(alertTimer);
+  alertTimer = null;
   if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
   activeOscillators.forEach(oscillator => { try { oscillator.stop(); } catch {} });
   activeOscillators = [];
@@ -94,5 +97,5 @@ export function playAudioAlert(kind) {
   if (typeof window === "undefined" || !ALERT_ANNOUNCEMENTS[kind]) return;
   stopAudioAlert();
   const delay = kind === "allClear" ? 0 : playSiren(kind);
-  window.setTimeout(() => speakAnnouncements(kind), delay);
+  alertTimer = window.setTimeout(() => { alertTimer = null; speakAnnouncements(kind); }, delay);
 }
