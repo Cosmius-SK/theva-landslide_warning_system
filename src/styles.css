@@ -514,3 +514,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 @media(min-width:901px) and (max-height:850px){.display-data{gap:4px}.display-sensor{padding:7px}.device-telemetry-card{padding:7px}.device-telemetry-heading h2{font-size:16px}.simulated-test-label{margin:4px 0}.device-telemetry-reading{padding:5px}.device-telemetry-reading strong{font-size:17px;margin:2px 0}.device-telemetry-meta{gap:2px;margin-top:4px}}
 @media(max-width:560px){.public-display{padding:10px;gap:10px}.display-header{min-height:42px}.display-header .brand-mark{width:34px;height:34px;border-radius:10px}.display-header .brand{gap:8px}.display-header .brand b{font-size:11px}.display-header .brand small{font-size:7px}.display-connection{font-size:8px;gap:6px;max-width:46%;text-align:right}.display-content{grid-template-rows:auto auto auto;gap:10px}.display-risk{padding:11px;border-radius:12px;min-height:0;grid-template-columns:1fr auto}.display-risk .eyebrow{font-size:8px}.display-risk h1{font-size:29px}.display-risk>p{font-size:11px}.display-action{font-size:10px}.display-scene-wrap,.display-data{padding:9px;border-radius:12px}.display-section-head h2{font-size:16px}.display-sensors{grid-template-columns:1fr}.display-sensor{padding:9px}.display-disclaimer{font-size:8px;line-height:1.4;letter-spacing:.03em}}
 @media(prefers-reduced-motion:reduce){.display-connection .dot{animation:none!important}}
+
+/* Public audio alert controls */
+.public-audio-controls{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.audio-control{border:1px solid #52725d;background:#14291d;color:#e8f3ea;border-radius:9px;padding:9px 12px;font:600 11px var(--mono);cursor:pointer}
+.audio-control:hover,.audio-control:focus-visible{border-color:#9be0ad;outline:2px solid #9be0ad55;outline-offset:2px}
+.audio-control:disabled{opacity:.45;cursor:not-allowed}
+.audio-enable{background:#1d5131;border-color:#5b9b6d}
+.audio-enabled-label{font:10px var(--mono);letter-spacing:.08em;color:#a9e6b6}
+@media(max-width:900px){.display-header{flex-wrap:wrap}.public-audio-controls{order:3;width:100%;justify-content:flex-start}.display-connection{margin-left:auto}}
