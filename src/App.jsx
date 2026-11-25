@@ -270,33 +270,26 @@ function PublicDisplay() {
   const risk = assess(effectiveReadings
     ? Object.values(effectiveReadings)
     : state?.sensors?.filter(sensor => sensor.healthy === true).map(sensor => Number(sensor.value)) || []);
-  const [audioEnabled, setAudioEnabled] = useState(false);
-  const [audioMuted, setAudioMuted] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(true);
   const previousRiskLevel = useRef(null);
   useEffect(() => {
     const previous = previousRiskLevel.current;
     previousRiskLevel.current = risk.level;
-    if (!audioEnabled || audioMuted || !previous) return;
+    if (!audioEnabled || !previous || previous === risk.level) return;
     const alert = getAudioAlertForTransition(previous, risk.level);
     if (alert) playAudioAlert(alert);
-  }, [risk.level, audioEnabled, audioMuted]);
+  }, [risk.level, audioEnabled]);
   useEffect(() => () => stopAudioAlert(), []);
-  function enablePublicAudio() {
-    setAudioEnabled(true);
-    setAudioMuted(false);
-    if (risk.level === "High") playAudioAlert("high");
-    else if (risk.level === "Evacuation") playAudioAlert("evacuation");
-  }
-  function toggleAudioMute() {
-    setAudioMuted(current => {
+  function togglePublicAudio() {
+    setAudioEnabled(current => {
       const next = !current;
-      if (next) stopAudioAlert();
+      if (!next) stopAudioAlert();
       return next;
     });
   }
   function testPublicAudio() {
-    if (!audioEnabled || audioMuted) return;
-    playAudioAlert(risk.level === "Evacuation" ? "evacuation" : "high");
+    if (!audioEnabled) return;
+    playAudioAlert("high");
   }
 
   const scene = normalizeScene(state?.scene || "panorama");
@@ -315,13 +308,9 @@ function PublicDisplay() {
       <a className="brand" href="/" aria-label="Theva Live home"><span className="brand-mark">T</span><span><b>THEVA LIVE</b><small>PUBLIC LEARNING DISPLAY</small></span></a>
       <div className={`display-connection ${connection}`} role="status" aria-live="polite"><i className="dot"/>{connectionText}</div>
       <div className="public-audio-controls" aria-label="Public audio alert controls">
-        {!audioEnabled
-          ? <button type="button" className="audio-control audio-enable" onClick={enablePublicAudio}>Enable public alerts</button>
-          : <>
-              <span className="audio-enabled-label">{audioMuted ? "AUDIO MUTED" : "AUDIO ENABLED"}</span>
-              <button type="button" className="audio-control" onClick={toggleAudioMute}>{audioMuted ? "Unmute" : "Mute"}</button>
-              <button type="button" className="audio-control" onClick={testPublicAudio} disabled={audioMuted}>Test alert</button>
-            </>}
+        <span className="audio-enabled-label">{audioEnabled ? "AUDIO ENABLED" : "AUDIO DISABLED"}</span>
+        <button type="button" className="audio-control audio-enable" onClick={togglePublicAudio}>{audioEnabled ? "Disable audio" : "Enable audio"}</button>
+        <button type="button" className="audio-control" onClick={testPublicAudio} disabled={!audioEnabled}>Test alert · HIGH</button>
       </div>
     </header>
     <div className="display-content">
