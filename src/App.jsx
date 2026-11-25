@@ -7,6 +7,7 @@ import { normalizeScene, SCENE_VIEWS, sceneImagePath } from "./lib/scenes";
 import { isCurrentOrNewerUpdate } from "./lib/shared-state";
 import { apiFetch } from "./lib/api-fetch";
 import { simulateSlopeReadings } from "./lib/simulation";
+import { getAudioAlertForTransition, playAudioAlert, stopAudioAlert } from "./lib/audio-alerts";
 
 const initialSensors = [
   { id: "moisture", name: "Soil moisture", unit: "Moisture", value: 22, icon: Droplets, description: "Water saturation in the slope" },
@@ -191,6 +192,34 @@ function PublicDisplay() {
   const [connection, setConnection] = useState("connecting");
   const updatedAtRef = useRef(null);
   const deviceTelemetry = useDeviceTelemetry(true);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [audioMuted, setAudioMuted] = useState(false);
+  const previousRiskLevel = useRef(null);
+  useEffect(() => {
+    const previous = previousRiskLevel.current;
+    previousRiskLevel.current = risk.level;
+    if (!audioEnabled || audioMuted || !previous) return;
+    const alert = getAudioAlertForTransition(previous, risk.level);
+    if (alert) playAudioAlert(alert);
+  }, [risk.level, audioEnabled, audioMuted]);
+  useEffect(() => () => stopAudioAlert(), []);
+  function enablePublicAudio() {
+    setAudioEnabled(true);
+    setAudioMuted(false);
+    if (risk.level === "High") playAudioAlert("high");
+    else if (risk.level === "Evacuation") playAudioAlert("evacuation");
+  }
+  function toggleAudioMute() {
+    setAudioMuted(current => {
+      const next = !current;
+      if (next) stopAudioAlert();
+      return next;
+    });
+  }
+  function testPublicAudio() {
+    if (!audioEnabled || audioMuted) return;
+    playAudioAlert(risk.level === "Evacuation" ? "evacuation" : "high");
+  }
 
   useEffect(() => {
     let stopped = false;
@@ -285,6 +314,15 @@ function PublicDisplay() {
     <header className="display-header">
       <a className="brand" href="/" aria-label="Theva Live home"><span className="brand-mark">T</span><span><b>THEVA LIVE</b><small>PUBLIC LEARNING DISPLAY</small></span></a>
       <div className={`display-connection ${connection}`} role="status" aria-live="polite"><i className="dot"/>{connectionText}</div>
+      <div className="public-audio-controls" aria-label="Public audio alert controls">
+        {!audioEnabled
+          ? <button type="button" className="audio-control audio-enable" onClick={enablePublicAudio}>Enable public alerts</button>
+          : <>
+              <span className="audio-enabled-label">{audioMuted ? "AUDIO MUTED" : "AUDIO ENABLED"}</span>
+              <button type="button" className="audio-control" onClick={toggleAudioMute}>{audioMuted ? "Unmute" : "Mute"}</button>
+              <button type="button" className="audio-control" onClick={testPublicAudio} disabled={audioMuted}>Test alert</button>
+            </>}
+      </div>
     </header>
     <div className="display-content">
       <section className={`display-risk ${risk.level.toLowerCase()}`}>
@@ -307,7 +345,7 @@ function PublicDisplay() {
         {autoSimulationActive && <div className="simulated-test-label public-simulation-label">AUTOMATIC VIRTUAL SIMULATION · VALUES CHANGE EVERY 5 SECONDS · SIMULATED TEST ONLY</div>}
       </aside>
     </div>
-    <footer className="display-disclaimer">EDUCATIONAL SIMULATION – NOT A REAL-WORLD LANDSLIDE WARNING SYSTEM</footer>
+    <footer className="display-disclaimer">EDUCATIONAL SIMULATION – NOT A REAL-WORLD LANDSLIDE WARNING SYSTEM · AUDIO ALERTS ARE DEMONSTRATION ONLY</footer>
   </main>;
 }
 
