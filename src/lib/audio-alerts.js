@@ -56,27 +56,36 @@ function playSiren(kind) {
   activeContext = context;
   const oscillator = context.createOscillator();
   const gain = context.createGain();
-  oscillator.type = "sine";
-  oscillator.connect(gain);
+  const filter = context.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = 1050;
+  filter.Q.value = 0.8;
+  oscillator.type = "sawtooth";
+  oscillator.connect(filter);
+  filter.connect(gain);
   gain.connect(context.destination);
 
-  const duration = kind === "evacuation" ? 6.0 : 3.8;
-  const cycles = kind === "evacuation" ? 3 : 2;
+  // A sharper alternating emergency klaxon rather than a smooth arrival-style chime.
+  const duration = kind === "evacuation" ? 7.2 : 4.8;
+  const cycles = kind === "evacuation" ? 6 : 4;
   const cycleDuration = duration / cycles;
-  const low = kind === "evacuation" ? 560 : 640;
-  const high = kind === "evacuation" ? 980 : 920;
+  const low = kind === "evacuation" ? 620 : 680;
+  const high = kind === "evacuation" ? 1180 : 1120;
   const now = context.currentTime;
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.linearRampToValueAtTime(0.16, now + 0.22);
   for (let cycle = 0; cycle < cycles; cycle += 1) {
     const begin = now + cycle * cycleDuration;
-    const midpoint = begin + cycleDuration / 2;
+    const midpoint = begin + cycleDuration * 0.46;
+    const finish = begin + cycleDuration;
+    gain.gain.setValueAtTime(0.0001, begin);
+    gain.gain.linearRampToValueAtTime(0.24, begin + 0.045);
     oscillator.frequency.setValueAtTime(low, begin);
     oscillator.frequency.linearRampToValueAtTime(high, midpoint);
-    oscillator.frequency.linearRampToValueAtTime(low, begin + cycleDuration);
+    oscillator.frequency.setValueAtTime(high, midpoint);
+    oscillator.frequency.linearRampToValueAtTime(low, finish - 0.035);
+    gain.gain.setValueAtTime(0.22, finish - 0.08);
+    gain.gain.linearRampToValueAtTime(0.0001, finish);
   }
-  gain.gain.setValueAtTime(0.16, now + duration - 0.35);
-  gain.gain.linearRampToValueAtTime(0.0001, now + duration);
   oscillator.start(now);
   oscillator.stop(now + duration + 0.05);
   activeOscillators = [oscillator];
@@ -89,18 +98,6 @@ function playSiren(kind) {
   };
   return duration * 1000 + 250;
 }
-
-function speakFallbackAnnouncement(kind) {
-  if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) return;
-  const voices = window.speechSynthesis.getVoices();
-  const preferred = voices.find(voice => voice.lang?.toLowerCase() === "en-in")
-    || voices.find(voice => voice.lang?.toLowerCase().startsWith("en"));
-  const utterance = new SpeechSynthesisUtterance(ALERT_ANNOUNCEMENTS[kind].en);
-  utterance.lang = preferred?.lang || "en-IN";
-  if (preferred) utterance.voice = preferred;
-  utterance.rate = 0.9;
-  window.speechSynthesis.speak(utterance);
-}
 function playRecordedAnnouncement(kind) {
   const audio = new Audio(ANNOUNCEMENT_AUDIO[kind]);
   activeAudio = audio;
@@ -111,13 +108,10 @@ function playRecordedAnnouncement(kind) {
   };
   audio.onerror = () => {
     if (activeAudio === audio) activeAudio = null;
-    // Best-effort on-device Tamil fallback if the browser has a Tamil voice.
-    speakFallbackAnnouncement(kind);
   };
   const playback = audio.play();
   if (playback && typeof playback.catch === "function") playback.catch(() => {
     if (activeAudio === audio) activeAudio = null;
-    speakFallbackAnnouncement(kind);
   });
 }
 
