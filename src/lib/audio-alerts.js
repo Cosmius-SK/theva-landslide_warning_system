@@ -20,13 +20,25 @@ export function getAudioAlertForTransition(previous, next) {
   return null;
 }
 
+const ANNOUNCEMENT_AUDIO = {
+  high: "https://resource2.heygen.ai/text_to_speech/90c4ff85a1d944c793f69bfe9c020e16/910d15fbaf0c43edb2df86d64c4dfeff/id=3ab5f5828f864c5bb7e22053fdc0b1c9.wav",
+  evacuation: "https://resource2.heygen.ai/text_to_speech/90c4ff85a1d944c793f69bfe9c020e16/910d15fbaf0c43edb2df86d64c4dfeff/id=0ccae4919b0a4be792861e9673664d8c.wav",
+  allClear: "https://resource2.heygen.ai/text_to_speech/90c4ff85a1d944c793f69bfe9c020e16/910d15fbaf0c43edb2df86d64c4dfeff/id=227eba57aefe44afa94bcc24b73b602b.wav"
+};
+
 let activeContext = null;
 let activeOscillators = [];
 let alertTimer = null;
+let activeAudio = null;
 
 export function stopAudioAlert() {
   if (typeof window !== "undefined" && alertTimer !== null) window.clearTimeout(alertTimer);
   alertTimer = null;
+  if (activeAudio) {
+    activeAudio.pause();
+    activeAudio.currentTime = 0;
+    activeAudio = null;
+  }
   if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
   activeOscillators.forEach(oscillator => { try { oscillator.stop(); } catch {} });
   activeOscillators = [];
@@ -44,25 +56,29 @@ function playSiren(kind) {
   activeContext = context;
   const oscillator = context.createOscillator();
   const gain = context.createGain();
-  oscillator.type = "sawtooth";
-  gain.gain.setValueAtTime(0.0001, context.currentTime);
+  oscillator.type = "sine";
   oscillator.connect(gain);
   gain.connect(context.destination);
-  const duration = kind === "evacuation" ? 5.2 : 3.2;
-  const steps = kind === "evacuation"
-    ? [740, 1120, 740, 1120, 740, 1120, 740, 1120, 740, 1120]
-    : [620, 900, 620, 900, 620, 900];
-  const stepDuration = duration / steps.length;
-  steps.forEach((frequency, index) => {
-    const start = context.currentTime + index * stepDuration;
-    oscillator.frequency.setValueAtTime(frequency, start);
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.linearRampToValueAtTime(kind === "evacuation" ? 0.13 : 0.085, start + 0.07);
-    gain.gain.setValueAtTime(kind === "evacuation" ? 0.13 : 0.085, start + stepDuration * 0.65);
-    gain.gain.linearRampToValueAtTime(0.0001, start + stepDuration);
-  });
-  oscillator.start();
-  oscillator.stop(context.currentTime + duration + 0.05);
+
+  const duration = kind === "evacuation" ? 6.0 : 3.8;
+  const cycles = kind === "evacuation" ? 3 : 2;
+  const cycleDuration = duration / cycles;
+  const low = kind === "evacuation" ? 560 : 640;
+  const high = kind === "evacuation" ? 980 : 920;
+  const now = context.currentTime;
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.linearRampToValueAtTime(0.16, now + 0.22);
+  for (let cycle = 0; cycle < cycles; cycle += 1) {
+    const begin = now + cycle * cycleDuration;
+    const midpoint = begin + cycleDuration / 2;
+    oscillator.frequency.setValueAtTime(low, begin);
+    oscillator.frequency.linearRampToValueAtTime(high, midpoint);
+    oscillator.frequency.linearRampToValueAtTime(low, begin + cycleDuration);
+  }
+  gain.gain.setValueAtTime(0.16, now + duration - 0.35);
+  gain.gain.linearRampToValueAtTime(0.0001, now + duration);
+  oscillator.start(now);
+  oscillator.stop(now + duration + 0.05);
   activeOscillators = [oscillator];
   oscillator.onended = () => {
     if (activeContext === context) {
@@ -74,28 +90,38 @@ function playSiren(kind) {
   return duration * 1000 + 250;
 }
 
-function speakAnnouncements(kind) {
-  if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) return;
-  const messages = ALERT_ANNOUNCEMENTS[kind];
-  const voices = window.speechSynthesis.getVoices();
-  const speak = (text, lang) => new Promise(resolve => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = lang;
-    const voice = voices.find(item => item.lang?.toLowerCase() === lang.toLowerCase())
-      || voices.find(item => item.lang?.toLowerCase().startsWith(lang.slice(0, 2)));
-    if (voice) utterance.voice = voice;
-    utterance.rate = 0.92;
-    utterance.pitch = 1;
-    utterance.onend = resolve;
-    utterance.onerror = resolve;
-    window.speechSynthesis.speak(utterance);
+function playRecordedAnnouncement(kind) {
+  const audio = new Audio(ANNOUNCEMENT_AUDIO[kind]);
+  activeAudio = audio;
+  audio.preload = "auto";
+  audio.volume = 1;
+  audio.onended = () => {
+    if (activeAudio === audio) activeAudio = null;
+  };
+  audio.onerror = () => {
+    if (activeAudio === audio) activeAudio = null;
+    // Best-effort on-device Tamil fallback if the browser has a Tamil voice.
+    const voices = window.speechSynthesis?.getVoices?.() || [];
+    const tamilVoice = voices.find(voice => voice.lang?.toLowerCase().startsWith("ta"));
+    if (tamilVoice) {
+      const utterance = new SpeechSynthesisUtterance(ALERT_ANNOUNCEMENTS[kind].ta);
+      utterance.voice = tamilVoice;
+      utterance.lang = tamilVoice.lang;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+  const playback = audio.play();
+  if (playback && typeof playback.catch === "function") playback.catch(() => {
+    if (activeAudio === audio) activeAudio = null;
   });
-  speak(messages.ta, "ta-IN").then(() => speak(messages.en, "en-IN"));
 }
 
 export function playAudioAlert(kind) {
-  if (typeof window === "undefined" || !ALERT_ANNOUNCEMENTS[kind]) return;
+  if (typeof window === "undefined" || !ANNOUNCEMENT_AUDIO[kind]) return;
   stopAudioAlert();
   const delay = kind === "allClear" ? 0 : playSiren(kind);
-  alertTimer = window.setTimeout(() => { alertTimer = null; speakAnnouncements(kind); }, delay);
+  alertTimer = window.setTimeout(() => {
+    alertTimer = null;
+    playRecordedAnnouncement(kind);
+  }, delay);
 }
