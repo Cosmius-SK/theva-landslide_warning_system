@@ -7,7 +7,7 @@ import { normalizeScene, SCENE_VIEWS, sceneImagePath } from "./lib/scenes";
 import { isCurrentOrNewerUpdate } from "./lib/shared-state";
 import { apiFetch } from "./lib/api-fetch";
 import { simulateSlopeReadings } from "./lib/simulation";
-import { getAudioAlertForTransition, playAudioAlert, stopAudioAlert } from "./lib/audio-alerts";
+import { getAudioAlertForTransition, playAudioAlert, stopAudioAlert, unlockAudio } from "./lib/audio-alerts";
 
 const initialSensors = [
   { id: "moisture", name: "Soil moisture", unit: "Moisture", value: 22, icon: Droplets, description: "Water saturation in the slope" },
@@ -271,25 +271,46 @@ function PublicDisplay() {
     ? Object.values(effectiveReadings)
     : state?.sensors?.filter(sensor => sensor.healthy === true).map(sensor => Number(sensor.value)) || []);
   const [audioEnabled, setAudioEnabled] = useState(true);
+  const [audioReady, setAudioReady] = useState(false);
+  const [audioStatus, setAudioStatus] = useState("Tap Enable sound to unlock browser audio.");
   const previousRiskLevel = useRef(null);
+  useEffect(() => {
+    const onAudioStatus = event => {
+      const info = event.detail || {};
+      if (info.status === "ready") { setAudioReady(true); setAudioStatus("Sound ready · Tamil then English"); }
+      else if (info.status === "playing") setAudioStatus(info.detail || "Playing announcement");
+      else if (info.status === "complete") setAudioStatus(info.detail || "Announcement complete");
+      else if (["error", "blocked", "needs-unlock"].includes(info.status)) {
+        setAudioReady(false);
+        setAudioStatus(info.detail || "Audio playback failed");
+      }
+    };
+    window.addEventListener("theva-audio-status", onAudioStatus);
+    return () => window.removeEventListener("theva-audio-status", onAudioStatus);
+  }, []);
   useEffect(() => {
     const previous = previousRiskLevel.current;
     previousRiskLevel.current = risk.level;
-    if (!audioEnabled || !previous || previous === risk.level) return;
+    if (!audioEnabled || !audioReady || !previous || previous === risk.level) return;
     const alert = getAudioAlertForTransition(previous, risk.level);
-    if (alert) playAudioAlert(alert);
-  }, [risk.level, audioEnabled]);
+    if (alert) playAudioAlert(alert).catch(() => {});
+  }, [risk.level, audioEnabled, audioReady]);
   useEffect(() => () => stopAudioAlert(), []);
+  async function enablePublicAudio() {
+    const ready = await unlockAudio();
+    setAudioReady(ready);
+    setAudioStatus(ready ? "Sound ready · Tamil then English" : "Sound blocked · check browser audio permissions");
+  }
   function togglePublicAudio() {
     setAudioEnabled(current => {
-      const next = !current;
-      if (!next) stopAudioAlert();
-      return next;
+      const nextEnabled = !current;
+      if (!nextEnabled) stopAudioAlert();
+      return nextEnabled;
     });
   }
   function testPublicAudio() {
-    if (!audioEnabled) return;
-    playAudioAlert("high");
+    if (!audioEnabled || !audioReady) return;
+    playAudioAlert("high").catch(() => {});
   }
 
   const scene = normalizeScene(state?.scene || "panorama");
@@ -308,9 +329,11 @@ function PublicDisplay() {
       <a className="brand" href="/" aria-label="Theva Live home"><span className="brand-mark">T</span><span><b>THEVA LIVE</b><small>PUBLIC LEARNING DISPLAY</small></span></a>
       <div className={`display-connection ${connection}`} role="status" aria-live="polite"><i className="dot"/>{connectionText}</div>
       <div className="public-audio-controls" aria-label="Public audio alert controls">
-        <span className="audio-enabled-label">{audioEnabled ? "AUDIO ENABLED" : "AUDIO DISABLED"}</span>
-        <button type="button" className="audio-control audio-enable" onClick={togglePublicAudio}>{audioEnabled ? "Disable audio" : "Enable audio"}</button>
-        <button type="button" className="audio-control" onClick={testPublicAudio} disabled={!audioEnabled}>Test alert · HIGH</button>
+        <span className="audio-enabled-label">{audioEnabled ? (audioReady ? "AUDIO READY" : "AUDIO LOCKED") : "AUDIO DISABLED"}</span>
+        {!audioReady && <button type="button" className="audio-control audio-enable" onClick={enablePublicAudio}>Enable sound</button>}
+        {audioReady && <button type="button" className="audio-control audio-enable" onClick={togglePublicAudio}>{audioEnabled ? "Disable audio" : "Enable audio"}</button>}
+        <button type="button" className="audio-control" onClick={testPublicAudio} disabled={!audioEnabled || !audioReady}>Test alert · HIGH</button>
+        <span className="audio-enabled-label" role="status" aria-live="polite">{audioStatus}</span>
       </div>
     </header>
     <div className="display-content">
