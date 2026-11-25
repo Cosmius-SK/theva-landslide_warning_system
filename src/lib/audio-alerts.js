@@ -13,6 +13,12 @@ export const ALERT_ANNOUNCEMENTS = {
   }
 };
 
+const AUDIO_PATHS = {
+  high: { ta: "/audio/high-ta.wav", en: "/audio/high-en.wav" },
+  evacuation: { ta: "/audio/evacuation-ta.wav", en: "/audio/evacuation-en.wav" },
+  allClear: { ta: "/audio/all-clear-ta.wav", en: "/audio/all-clear-en.wav" }
+};
+
 export function getAudioAlertForTransition(previous, next) {
   if (next === "Evacuation" && previous !== "Evacuation") return "evacuation";
   if (next === "High" && previous !== "High" && previous !== "Evacuation") return "high";
@@ -20,107 +26,128 @@ export function getAudioAlertForTransition(previous, next) {
   return null;
 }
 
-const ANNOUNCEMENT_AUDIO = {
-  high: "https://resource2.heygen.ai/text_to_speech/90c4ff85a1d944c793f69bfe9c020e16/910d15fbaf0c43edb2df86d64c4dfeff/id=3ab5f5828f864c5bb7e22053fdc0b1c9.wav",
-  evacuation: "https://resource2.heygen.ai/text_to_speech/90c4ff85a1d944c793f69bfe9c020e16/910d15fbaf0c43edb2df86d64c4dfeff/id=0ccae4919b0a4be792861e9673664d8c.wav",
-  allClear: "https://resource2.heygen.ai/text_to_speech/90c4ff85a1d944c793f69bfe9c020e16/910d15fbaf0c43edb2df86d64c4dfeff/id=227eba57aefe44afa94bcc24b73b602b.wav"
-};
-
-let activeContext = null;
-let activeOscillators = [];
-let alertTimer = null;
+let audioContext = null;
+let audioUnlocked = false;
 let activeAudio = null;
+let activeOscillator = null;
+let alertGeneration = 0;
+
+function emitStatus(status, detail = "") {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("theva-audio-status", { detail: { status, detail } }));
+  }
+}
+
+export async function unlockAudio() {
+  if (typeof window === "undefined") return false;
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      if (!audioContext || audioContext.state === "closed") audioContext = new AudioContextClass();
+      if (audioContext.state !== "running") await audioContext.resume();
+    }
+    const silent = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=");
+    silent.volume = 0;
+    await silent.play();
+    silent.pause();
+    silent.currentTime = 0;
+    audioUnlocked = !audioContext || audioContext.state === "running";
+    emitStatus(audioUnlocked ? "ready" : "blocked");
+    return audioUnlocked;
+  } catch (error) {
+    audioUnlocked = false;
+    emitStatus("blocked", error && error.message ? error.message : "Browser did not allow audio");
+    return false;
+  }
+}
 
 export function stopAudioAlert() {
-  if (typeof window !== "undefined" && alertTimer !== null) window.clearTimeout(alertTimer);
-  alertTimer = null;
+  alertGeneration += 1;
   if (activeAudio) {
     activeAudio.pause();
     activeAudio.currentTime = 0;
     activeAudio = null;
   }
-  if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
-  activeOscillators.forEach(oscillator => { try { oscillator.stop(); } catch {} });
-  activeOscillators = [];
-  if (activeContext) {
-    const context = activeContext;
-    activeContext = null;
-    context.close().catch(() => {});
+  if (activeOscillator) {
+    try { activeOscillator.stop(); } catch {}
+    activeOscillator = null;
   }
 }
 
 function playSiren(kind) {
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return 0;
-  const context = new AudioContextClass();
-  activeContext = context;
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-  const filter = context.createBiquadFilter();
+  if (!audioContext || audioContext.state !== "running") return 0;
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  const filter = audioContext.createBiquadFilter();
   filter.type = "bandpass";
-  filter.frequency.value = 1050;
-  filter.Q.value = 0.8;
-  oscillator.type = "sawtooth";
+  filter.frequency.value = 900;
+  filter.Q.value = 1.1;
+  oscillator.type = "square";
   oscillator.connect(filter);
   filter.connect(gain);
-  gain.connect(context.destination);
-
-  // A sharper alternating emergency klaxon rather than a smooth arrival-style chime.
-  const duration = kind === "evacuation" ? 7.2 : 4.8;
+  gain.connect(audioContext.destination);
+  const duration = kind === "evacuation" ? 6 : 4;
   const cycles = kind === "evacuation" ? 6 : 4;
   const cycleDuration = duration / cycles;
-  const low = kind === "evacuation" ? 620 : 680;
-  const high = kind === "evacuation" ? 1180 : 1120;
-  const now = context.currentTime;
+  const now = audioContext.currentTime;
   gain.gain.setValueAtTime(0.0001, now);
   for (let cycle = 0; cycle < cycles; cycle += 1) {
     const begin = now + cycle * cycleDuration;
-    const midpoint = begin + cycleDuration * 0.46;
+    const midpoint = begin + cycleDuration * 0.5;
     const finish = begin + cycleDuration;
     gain.gain.setValueAtTime(0.0001, begin);
-    gain.gain.linearRampToValueAtTime(0.24, begin + 0.045);
-    oscillator.frequency.setValueAtTime(low, begin);
-    oscillator.frequency.linearRampToValueAtTime(high, midpoint);
-    oscillator.frequency.setValueAtTime(high, midpoint);
-    oscillator.frequency.linearRampToValueAtTime(low, finish - 0.035);
-    gain.gain.setValueAtTime(0.22, finish - 0.08);
+    gain.gain.linearRampToValueAtTime(0.16, begin + 0.05);
+    oscillator.frequency.setValueAtTime(740, begin);
+    oscillator.frequency.linearRampToValueAtTime(1040, midpoint);
+    oscillator.frequency.setValueAtTime(1040, midpoint);
+    oscillator.frequency.linearRampToValueAtTime(740, finish - 0.04);
+    gain.gain.setValueAtTime(0.14, finish - 0.08);
     gain.gain.linearRampToValueAtTime(0.0001, finish);
   }
+  activeOscillator = oscillator;
   oscillator.start(now);
   oscillator.stop(now + duration + 0.05);
-  activeOscillators = [oscillator];
-  oscillator.onended = () => {
-    if (activeContext === context) {
-      activeContext = null;
-      context.close().catch(() => {});
-    }
-    activeOscillators = activeOscillators.filter(item => item !== oscillator);
-  };
-  return duration * 1000 + 250;
+  oscillator.onended = () => { if (activeOscillator === oscillator) activeOscillator = null; };
+  return duration * 1000 + 200;
 }
-function playRecordedAnnouncement(kind) {
-  const audio = new Audio(ANNOUNCEMENT_AUDIO[kind]);
-  activeAudio = audio;
-  audio.preload = "auto";
-  audio.volume = 1;
-  audio.onended = () => {
-    if (activeAudio === audio) activeAudio = null;
-  };
-  audio.onerror = () => {
-    if (activeAudio === audio) activeAudio = null;
-  };
-  const playback = audio.play();
-  if (playback && typeof playback.catch === "function") playback.catch(() => {
-    if (activeAudio === audio) activeAudio = null;
+
+function playClip(url) {
+  return new Promise((resolve, reject) => {
+    const audio = new Audio(url);
+    activeAudio = audio;
+    audio.preload = "auto";
+    audio.volume = 1;
+    audio.onended = () => { if (activeAudio === audio) activeAudio = null; resolve(); };
+    audio.onerror = () => {
+      if (activeAudio === audio) activeAudio = null;
+      reject(new Error("Unable to load announcement audio: " + url));
+    };
+    audio.play().catch(error => {
+      if (activeAudio === audio) activeAudio = null;
+      reject(error);
+    });
   });
 }
 
-export function playAudioAlert(kind) {
-  if (typeof window === "undefined" || !ANNOUNCEMENT_AUDIO[kind]) return;
+export async function playAudioAlert(kind) {
+  if (!AUDIO_PATHS[kind]) throw new Error("Unknown alert type: " + kind);
+  if (!audioUnlocked) {
+    emitStatus("needs-unlock", "Tap Enable sound before automatic alerts can play.");
+    throw new Error("Audio is locked. Tap Enable sound first.");
+  }
   stopAudioAlert();
-  const delay = kind === "allClear" ? 0 : playSiren(kind);
-  alertTimer = window.setTimeout(() => {
-    alertTimer = null;
-    playRecordedAnnouncement(kind);
-  }, delay);
+  const generation = alertGeneration;
+  emitStatus("playing", kind + ": siren, Tamil, then English");
+  try {
+    const delay = kind === "allClear" ? 0 : playSiren(kind);
+    if (delay) await new Promise(resolve => window.setTimeout(resolve, delay));
+    if (generation !== alertGeneration) return;
+    await playClip(AUDIO_PATHS[kind].ta);
+    if (generation !== alertGeneration) return;
+    await playClip(AUDIO_PATHS[kind].en);
+    if (generation === alertGeneration) emitStatus("complete", kind + ": Tamil and English announcements played");
+  } catch (error) {
+    if (generation === alertGeneration) emitStatus("error", error && error.message ? error.message : "Audio playback failed");
+    throw error;
+  }
 }
