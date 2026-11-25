@@ -192,35 +192,6 @@ function PublicDisplay() {
   const [connection, setConnection] = useState("connecting");
   const updatedAtRef = useRef(null);
   const deviceTelemetry = useDeviceTelemetry(true);
-  const [audioEnabled, setAudioEnabled] = useState(false);
-  const [audioMuted, setAudioMuted] = useState(false);
-  const previousRiskLevel = useRef(null);
-  useEffect(() => {
-    const previous = previousRiskLevel.current;
-    previousRiskLevel.current = risk.level;
-    if (!audioEnabled || audioMuted || !previous) return;
-    const alert = getAudioAlertForTransition(previous, risk.level);
-    if (alert) playAudioAlert(alert);
-  }, [risk.level, audioEnabled, audioMuted]);
-  useEffect(() => () => stopAudioAlert(), []);
-  function enablePublicAudio() {
-    setAudioEnabled(true);
-    setAudioMuted(false);
-    if (risk.level === "High") playAudioAlert("high");
-    else if (risk.level === "Evacuation") playAudioAlert("evacuation");
-  }
-  function toggleAudioMute() {
-    setAudioMuted(current => {
-      const next = !current;
-      if (next) stopAudioAlert();
-      return next;
-    });
-  }
-  function testPublicAudio() {
-    if (!audioEnabled || audioMuted) return;
-    playAudioAlert(risk.level === "Evacuation" ? "evacuation" : "high");
-  }
-
   useEffect(() => {
     let stopped = false;
     let timer;
@@ -299,6 +270,35 @@ function PublicDisplay() {
   const risk = assess(effectiveReadings
     ? Object.values(effectiveReadings)
     : state?.sensors?.filter(sensor => sensor.healthy === true).map(sensor => Number(sensor.value)) || []);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [audioMuted, setAudioMuted] = useState(false);
+  const previousRiskLevel = useRef(null);
+  useEffect(() => {
+    const previous = previousRiskLevel.current;
+    previousRiskLevel.current = risk.level;
+    if (!audioEnabled || audioMuted || !previous) return;
+    const alert = getAudioAlertForTransition(previous, risk.level);
+    if (alert) playAudioAlert(alert);
+  }, [risk.level, audioEnabled, audioMuted]);
+  useEffect(() => () => stopAudioAlert(), []);
+  function enablePublicAudio() {
+    setAudioEnabled(true);
+    setAudioMuted(false);
+    if (risk.level === "High") playAudioAlert("high");
+    else if (risk.level === "Evacuation") playAudioAlert("evacuation");
+  }
+  function toggleAudioMute() {
+    setAudioMuted(current => {
+      const next = !current;
+      if (next) stopAudioAlert();
+      return next;
+    });
+  }
+  function testPublicAudio() {
+    if (!audioEnabled || audioMuted) return;
+    playAudioAlert(risk.level === "Evacuation" ? "evacuation" : "high");
+  }
+
   const scene = normalizeScene(state?.scene || "panorama");
   const sourceLabel = effectiveReadings ? (autoSimulationActive ? "AUTOMATIC VIRTUAL SIMULATION · SIMULATED TEST ONLY" : "ESP32 DEVICE") : virtualOverrideActive ? "VIRTUAL OVERRIDE" : "AUTOMATIC VIRTUAL FALLBACK";
   const educationalAction = risk.level === "Evacuation" || risk.level === "High"
