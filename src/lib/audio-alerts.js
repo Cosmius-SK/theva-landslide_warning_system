@@ -90,6 +90,17 @@ function playSiren(kind) {
   return duration * 1000 + 250;
 }
 
+function speakFallbackAnnouncement(kind) {
+  if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) return;
+  const voices = window.speechSynthesis.getVoices();
+  const preferred = voices.find(voice => voice.lang?.toLowerCase() === "en-in")
+    || voices.find(voice => voice.lang?.toLowerCase().startsWith("en"));
+  const utterance = new SpeechSynthesisUtterance(ALERT_ANNOUNCEMENTS[kind].en);
+  utterance.lang = preferred?.lang || "en-IN";
+  if (preferred) utterance.voice = preferred;
+  utterance.rate = 0.9;
+  window.speechSynthesis.speak(utterance);
+}
 function playRecordedAnnouncement(kind) {
   const audio = new Audio(ANNOUNCEMENT_AUDIO[kind]);
   activeAudio = audio;
@@ -101,18 +112,12 @@ function playRecordedAnnouncement(kind) {
   audio.onerror = () => {
     if (activeAudio === audio) activeAudio = null;
     // Best-effort on-device Tamil fallback if the browser has a Tamil voice.
-    const voices = window.speechSynthesis?.getVoices?.() || [];
-    const tamilVoice = voices.find(voice => voice.lang?.toLowerCase().startsWith("ta"));
-    if (tamilVoice) {
-      const utterance = new SpeechSynthesisUtterance(ALERT_ANNOUNCEMENTS[kind].ta);
-      utterance.voice = tamilVoice;
-      utterance.lang = tamilVoice.lang;
-      window.speechSynthesis.speak(utterance);
-    }
+    speakFallbackAnnouncement(kind);
   };
   const playback = audio.play();
   if (playback && typeof playback.catch === "function") playback.catch(() => {
     if (activeAudio === audio) activeAudio = null;
+    speakFallbackAnnouncement(kind);
   });
 }
 
