@@ -3,11 +3,10 @@
   "private": true,
   "version": "0.2.0",
   "type": "module",
-  "engines": {
-    "node": ">=22"
-  },
+  "engines": { "node": ">=22" },
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/generate-chariot-audio.js",
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test tests/audio-alerts.test.js tests/api-fetch.test.js tests/audience-session.test.js tests/contracts.test.js tests/feedback-api.test.js tests/operator-lock-api.test.js tests/risk.test.js tests/scenes.test.js tests/simulation.test.js tests/shared-state.test.js tests/state-api.test.js tests/supabase-admin.test.js tests/telemetry-api.test.js",
