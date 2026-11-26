@@ -50,24 +50,36 @@ async function getVoiceId(apiKey) {
       throw new Error(`Chariot voice catalogue failed: HTTP ${response.status} ${(await response.text()).slice(0, 500)}`);
     }
     const payload = await response.json();
-    const pageItems = Array.isArray(payload) ? payload : (payload.voices ?? payload.data ?? payload.items ?? []);
-    for (const value of pageItems) {
-      if (!value || typeof value !== "object") continue;
+    let pageCursor = null;
+    let hasMore = false;
+    const visit = (value) => {
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+      if (!value || typeof value !== "object") return;
       const name = value.name ?? value.voice_name ?? value.display_name ?? value.label;
       const id = value.voice_id ?? value.id ?? value.uuid;
       const models = value.models;
       const supportsModel = !Array.isArray(models) || models.length === 0 ||
         models.some(model => (typeof model === "string" ? model : model?.model_type ?? model?.id ?? model?.name) === MODEL_TYPE);
       if (typeof name === "string" && typeof id === "string" && supportsModel) candidates.push({ name, id });
-    }
-    const hasMore = payload.has_more === true || payload.hasMore === true;
-    cursor = payload.next_cursor ?? payload.nextCursor ?? null;
+      for (const [key, child] of Object.entries(value)) {
+        if (key === "next_cursor" || key === "nextCursor") {
+          if (typeof child === "string" && child) pageCursor = child;
+        }
+        if (key === "has_more" || key === "hasMore") hasMore ||= child === true;
+        if (child && typeof child === "object") visit(child);
+      }
+    };
+    visit(payload);
+    cursor = pageCursor;
     if (!hasMore || !cursor) break;
   }
   const selected = candidates.find(v => v.name.toLocaleLowerCase() === VOICE_NAME.toLocaleLowerCase());
   if (!selected) {
     const available = [...new Set(candidates.map(v => v.name))].sort();
-    throw new Error(`Chariot voice "${VOICE_NAME}" not found in the multilingual voice catalogue. Available names: ${available.join(", ") || "unrecognized response shape"}`);
+    throw new Error(`Chariot voice "${VOICE_NAME}" not found in the multilingual voice catalogue. Available names: ${available.join(", ") || "none returned"}`);
   }
   return selected.id;
 }
