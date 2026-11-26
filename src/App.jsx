@@ -367,11 +367,10 @@ function PublicDisplay() {
         {!autoSimulationActive && <DeviceTelemetryPanel deviceTelemetry={deviceTelemetry}/>}
         {autoSimulationActive && <div className="simulated-test-label public-simulation-label">AUTOMATIC VIRTUAL SIMULATION · VALUES CHANGE EVERY 5 SECONDS · SIMULATED TEST ONLY</div>}
       </aside>
-    </div>
-    <section className={`display-theva ${risk.tone}`} aria-label="Theva's live explanation">
-        <div className="theva-character-stage" aria-hidden="true">
+      <section className={`display-theva ${risk.tone}`} aria-label="Theva's live explanation">
+        <div className="theva-character-stage">
           <div className={`theva-character-art theva-${risk.level.toLowerCase()}`} role="img" aria-label={`Theva in ${risk.level.toLowerCase()} field gear`}/>
-          <span className="theva-character-caption">YOUR SLOPE EXPLORER</span>
+          <span className="theva-character-caption">THEVA · YOUR SLOPE GUIDE</span>
         </div>
         <div className="theva-dialogue">
           <div className="eyebrow">THEVA EXPLAINS · {risk.level.toUpperCase()}</div>
@@ -380,6 +379,7 @@ function PublicDisplay() {
           <div className="theva-precaution"><b>WHAT SHOULD WE DO?</b><span>{risk.level === "Evacuation" || risk.level === "High" ? "Follow the teacher's safety instructions. This is a classroom model, not a real warning." : risk.level === "Watch" ? "Stay alert, observe changes and discuss the readings with the operator." : risk.level === "Unavailable" ? "Ask the operator to check the unavailable sensor channels." : "Keep learning: watch how each sensor changes the hillside scene."}</span></div>
         </div>
       </section>
+    </div>
     <footer className="display-disclaimer">EDUCATIONAL SIMULATION – NOT A REAL-WORLD LANDSLIDE WARNING SYSTEM · AUDIO ALERTS ARE DEMONSTRATION ONLY</footer>
   </main>;
 }
