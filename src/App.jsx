@@ -89,8 +89,8 @@ function DeviceTelemetryPanel({ deviceTelemetry }) {
   ];
 
   return <section className="device-telemetry-card" aria-label="ESP32 device telemetry">
-    <div className="device-telemetry-heading"><div><div className="card-kicker">ESP32 DEVICE TELEMETRY</div><h2>Simulated test feed</h2></div><span className={`device-telemetry-status ${telemetry?.online ? "online" : "offline"}`} role="status"><i className={`dot ${telemetry?.online ? "online" : "offline"}`}/>{status}</span></div>
-    <strong className="simulated-test-label">SIMULATED TEST ONLY</strong>
+    <div className="device-telemetry-heading"><div><div className="card-kicker">ESP32 DEVICE TELEMETRY</div><h2>Device connection</h2></div><span className={`device-telemetry-status ${telemetry?.online ? "online" : "offline"}`} role="status"><i className={`dot ${telemetry?.online ? "online" : "offline"}`}/>{status}</span></div>
+    {telemetry?.online && <strong className="simulated-test-label">DEVICE DATA · LIVE FEED</strong>}{!telemetry?.online && <strong className="simulated-test-label">DEVICE DATA NOT AVAILABLE</strong>}
     {telemetry ? <>
       <div className="device-telemetry-readings">{sensors.map(([id, label]) => <article className="device-telemetry-reading" key={id}>
         <b>{label}</b><strong>{Number.isFinite(telemetry.readings?.[id]) ? `${telemetry.readings[id]}%` : "—"}</strong><small>SIMULATED TEST ONLY</small>
@@ -364,7 +364,7 @@ function PublicDisplay() {
           <i className={`dot ${sensor.failed ? "offline" : "online"}`}/><div><b>{sensor.name}</b><small>{sensor.failed ? "Unavailable" : modelDeviceReadings ? "ESP32 DEVICE · SIMULATED TEST ONLY" : virtualOverrideActive ? "VIRTUAL OVERRIDE · SIMULATED TEST ONLY" : "Simulation input · monitoring"}</small></div><strong>{sensor.failed ? "—" : `${sensor.value}%`}</strong>
         </article>)}</div>
         <div className="display-meta"><span><b>Input mode</b>{sourceLabel}</span><span><b>Last update</b>{updatedAt ? new Date(updatedAt).toLocaleString() : "No shared update received"}</span><span><b>Synchronization</b>{connectionText}</span></div>
-        {!autoSimulationActive && <DeviceTelemetryPanel deviceTelemetry={deviceTelemetry}/>}
+        {!autoSimulationActive && !virtualOverrideActive && <DeviceTelemetryPanel deviceTelemetry={deviceTelemetry}/>}
         {autoSimulationActive && <div className="simulated-test-label public-simulation-label">AUTOMATIC VIRTUAL SIMULATION · VALUES CHANGE EVERY 5 SECONDS · SIMULATED TEST ONLY</div>}
       </aside>
       <section className={`display-theva ${risk.tone}`} aria-label="Theva's live explanation">
