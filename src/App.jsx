@@ -337,7 +337,7 @@ function PublicDisplay() {
 
   return <main className="public-display">
     <header className="display-header">
-      <a className="brand" href="/" aria-label="Theva Live home"><span className="brand-mark">T</span><span><b>THEVA LIVE</b><small>PUBLIC LEARNING DISPLAY</small></span></a>
+      <a className="brand" href="/" aria-label="Theva Live home"><img className="brand-logo" src="/brand/theva-logo.webp" alt="" /><span><b>THEVA LIVE</b><small>PUBLIC LEARNING DISPLAY</small></span></a>
       <div className={`display-connection ${connection}`} role="status" aria-live="polite"><i className="dot"/>{connectionText}</div>
     </header>
     <section className="display-audio-bar" aria-label="Public audio alert controls">
@@ -364,7 +364,7 @@ function PublicDisplay() {
           <i className={`dot ${sensor.failed ? "offline" : "online"}`}/><div><b>{sensor.name}</b><small>{sensor.failed ? "Unavailable" : modelDeviceReadings ? "ESP32 DEVICE · SIMULATED TEST ONLY" : virtualOverrideActive ? "VIRTUAL OVERRIDE · SIMULATED TEST ONLY" : "Simulation input · monitoring"}</small></div><strong>{sensor.failed ? "—" : `${sensor.value}%`}</strong>
         </article>)}</div>
         <div className="display-meta"><span><b>Input mode</b>{sourceLabel}</span><span><b>Last update</b>{updatedAt ? new Date(updatedAt).toLocaleString() : "No shared update received"}</span><span><b>Synchronization</b>{connectionText}</span></div>
-        {!autoSimulationActive && !virtualOverrideActive && <DeviceTelemetryPanel deviceTelemetry={deviceTelemetry}/>}
+        {!autoSimulationActive && !virtualOverrideActive && state?.mode === "hardware" && <DeviceTelemetryPanel deviceTelemetry={deviceTelemetry}/>}
         {autoSimulationActive && <div className="simulated-test-label public-simulation-label">AUTOMATIC VIRTUAL SIMULATION · VALUES CHANGE EVERY 5 SECONDS · SIMULATED TEST ONLY</div>}
       </aside>
       <section className={`display-theva ${risk.tone}`} aria-label="Theva's live explanation">
