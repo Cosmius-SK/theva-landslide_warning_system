@@ -323,6 +323,17 @@ function PublicDisplay() {
         ? "Observe the calm hillside, then change a demonstration sensor with the operator."
         : "Waiting for the operator console to publish its first shared reading.";
   const connectionText = connection === "stale" ? "CONNECTION LOST · SHOWING LAST UPDATE" : connection === "offline" ? "OFFLINE · NO LIVE READING" : operatorConnected === false && connection === "live" ? "OPERATOR OFFLINE · LAST SHARED STATE" : operatorConnected === true && connection === "live" ? "LIVE · OPERATOR CONNECTED" : connection === "waiting" ? "WAITING FOR OPERATOR" : "CONNECTING TO CLOUD";
+  const leadingSensor = sensors.filter(sensor => !sensor.failed).sort((a, b) => b.value - a.value)[0];
+  const thevaDialogue = risk.level === "Evacuation"
+    ? "Our model is showing its highest alert. Please move calmly to the safe area your teacher has identified. Do not go near the model slope."
+    : risk.level === "High"
+      ? `The readings are showing a high-risk pattern${leadingSensor ? `, especially ${leadingSensor.name.toLowerCase()} at ${leadingSensor.value}%` : ""}. In our demonstration, follow the teacher's evacuation instructions and keep away from the slope.`
+      : risk.level === "Watch"
+        ? `Let's keep watching the hillside. ${leadingSensor ? `${leadingSensor.name} is currently ${leadingSensor.value}%.` : "A sensor reading is changing."} Tell the operator if you notice the number rising.`
+        : risk.level === "Unavailable"
+          ? "I cannot read all the sensor signals right now. Let's ask the operator to check the sensors before drawing a conclusion."
+          : `The model is currently showing a safe condition. ${leadingSensor ? `${leadingSensor.name} is ${leadingSensor.value}%.` : "The readings are steady."} Keep observing how rain, water in the soil and ground movement are connected.`;
+
 
   return <main className="public-display">
     <header className="display-header">
@@ -357,6 +368,18 @@ function PublicDisplay() {
         {autoSimulationActive && <div className="simulated-test-label public-simulation-label">AUTOMATIC VIRTUAL SIMULATION · VALUES CHANGE EVERY 5 SECONDS · SIMULATED TEST ONLY</div>}
       </aside>
     </div>
+    <section className={`display-theva ${risk.tone}`} aria-label="Theva's live explanation">
+        <div className="theva-character-stage" aria-hidden="true">
+          <div className="theva-character"><div className="theva-hair"/><div className="theva-face"><i/><i/><span/></div><div className="theva-neck"/><div className="theva-jacket"><b>THEVA</b></div></div>
+          <span className="theva-character-caption">YOUR SLOPE EXPLORER</span>
+        </div>
+        <div className="theva-dialogue">
+          <div className="eyebrow">THEVA EXPLAINS · {risk.level.toUpperCase()}</div>
+          <h2>What do the readings tell us?</h2>
+          <p>{thevaDialogue}</p>
+          <div className="theva-precaution"><b>WHAT SHOULD WE DO?</b><span>{risk.level === "Evacuation" || risk.level === "High" ? "Follow the teacher's safety instructions. This is a classroom model, not a real warning." : risk.level === "Watch" ? "Stay alert, observe changes and discuss the readings with the operator." : risk.level === "Unavailable" ? "Ask the operator to check the unavailable sensor channels." : "Keep learning: watch how each sensor changes the hillside scene."}</span></div>
+        </div>
+      </section>
     <footer className="display-disclaimer">EDUCATIONAL SIMULATION – NOT A REAL-WORLD LANDSLIDE WARNING SYSTEM · AUDIO ALERTS ARE DEMONSTRATION ONLY</footer>
   </main>;
 }
