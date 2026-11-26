@@ -45,15 +45,25 @@ export async function unlockAudio() {
     if (AudioContextClass) {
       if (!audioContext || audioContext.state === "closed") audioContext = new AudioContextClass();
       if (audioContext.state !== "running") await audioContext.resume();
+
+      // Web Audio is the primary playback path for the siren. On iOS,
+      // a separate silent HTMLAudioElement can be rejected even after
+      // AudioContext.resume() succeeds, so do not let that optional probe
+      // incorrectly keep the whole display locked.
+      audioUnlocked = audioContext.state === "running";
+      if (!audioUnlocked) throw new Error("Browser audio context did not start");
+    } else {
+      // Older browsers without Web Audio still need a successful media
+      // playback gesture before announcement clips can be played.
+      const silent = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=");
+      silent.volume = 0;
+      await silent.play();
+      silent.pause();
+      silent.currentTime = 0;
+      audioUnlocked = true;
     }
-    const silent = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=");
-    silent.volume = 0;
-    await silent.play();
-    silent.pause();
-    silent.currentTime = 0;
-    audioUnlocked = !audioContext || audioContext.state === "running";
-    emitStatus(audioUnlocked ? "ready" : "blocked");
-    return audioUnlocked;
+    emitStatus("ready");
+    return true;
   } catch (error) {
     audioUnlocked = false;
     emitStatus("blocked", error && error.message ? error.message : "Browser did not allow audio");
