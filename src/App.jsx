@@ -370,7 +370,7 @@ function PublicDisplay() {
     </div>
     <section className={`display-theva ${risk.tone}`} aria-label="Theva's live explanation">
         <div className="theva-character-stage" aria-hidden="true">
-          <div className="theva-character"><div className="theva-hair"/><div className="theva-face"><i/><i/><span/></div><div className="theva-neck"/><div className="theva-jacket"><b>THEVA</b></div></div>
+          <div className={`theva-character-art theva-${risk.level.toLowerCase()}`} role="img" aria-label={`Theva in ${risk.level.toLowerCase()} field gear`}/>
           <span className="theva-character-caption">YOUR SLOPE EXPLORER</span>
         </div>
         <div className="theva-dialogue">
