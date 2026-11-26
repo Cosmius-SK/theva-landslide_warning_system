@@ -100,6 +100,34 @@ function DeviceTelemetryPanel({ deviceTelemetry }) {
   </section>;
 }
 
+
+function ThevaMascot({ level = "Safe", compact = false }) {
+  const state = String(level).toLowerCase();
+  const outfit = state === "evacuation" ? "evacuation" : state === "high" ? "high" : state === "watch" ? "watch" : "safe";
+  const jacket = outfit === "evacuation" ? "#e85c36" : outfit === "high" ? "#ed8b25" : outfit === "watch" ? "#e9b52e" : "#087f78";
+  return <svg className={`theva-mascot theva-${outfit} ${compact ? "compact" : ""}`} viewBox="0 0 220 290" role="img" aria-label={`Theva in ${outfit} outfit`}>
+    <ellipse cx="111" cy="278" rx="65" ry="8" fill="#07140e" opacity=".35"/>
+    <path d="M54 154Q40 177 45 248L70 254 84 190 137 190 151 254 179 248Q184 181 160 154Z" fill={jacket} stroke="#172b24" strokeWidth="5"/>
+    <path d="M72 165Q107 185 145 164L137 208 85 208Z" fill="#d8e0d2" opacity=".9"/>
+    <path d="M80 208L73 265 96 266 108 216 125 266 149 265 137 208" fill="#8a7654" stroke="#3b3428" strokeWidth="4"/>
+    <path d="M66 248L58 275Q78 286 99 277L98 265 84 253ZM126 265L128 278Q151 287 172 276L164 250 148 255Z" fill="#4b4b42" stroke="#222c26" strokeWidth="4"/>
+    <path d="M72 161Q47 170 43 219L57 228 81 184M148 160Q177 172 179 216L164 227 140 184" fill={jacket} stroke="#172b24" strokeWidth="5"/>
+    <path d="M78 65Q72 29 105 22Q147 15 154 62L150 116Q145 148 111 151Q76 144 72 112Z" fill="#a95f35" stroke="#5d3426" strokeWidth="4"/>
+    <path d="M72 78Q60 41 89 22Q115 -1 145 19Q166 32 158 73L147 55Q130 63 113 48Q99 69 77 68Z" fill="#211b1a" stroke="#151719" strokeWidth="4"/>
+    <path d="M82 84Q94 74 105 85M121 84Q135 74 145 85" fill="none" stroke="#38231d" strokeWidth="5" strokeLinecap="round"/>
+    <ellipse cx="98" cy="96" rx="8" ry="11" fill="#fff"/><ellipse cx="132" cy="96" rx="8" ry="11" fill="#fff"/><circle cx="100" cy="98" r="5" fill="#35221c"/><circle cx="134" cy="98" r="5" fill="#35221c"/>
+    <path d="M111 100L106 115Q112 120 119 114" fill="none" stroke="#7b402b" strokeWidth="3" strokeLinecap="round"/><path d="M96 129Q112 142 132 127" fill="none" stroke="#713329" strokeWidth="4" strokeLinecap="round"/>
+    {outfit === "high" && <path d="M63 53Q110 9 159 52L154 65 68 65Z" fill="#f2b92c" stroke="#5c4721" strokeWidth="5"/>}
+    {outfit === "evacuation" && <path d="M65 158L111 180 158 158 164 191 111 215 57 191Z" fill="#ffdb49" stroke="#8b3e24" strokeWidth="4"/>}
+    {outfit === "watch" && <path d="M63 57Q108 17 158 57L151 71 70 71Z" fill="#e9b52e" stroke="#76551c" strokeWidth="4"/>}
+    <rect x="119" y="174" width="35" height="19" rx="4" fill="#f4e9cf" stroke="#27362d" strokeWidth="2"/><text x="136.5" y="187" textAnchor="middle" fontSize="8" fontWeight="900" fill="#243329">THEVA</text>
+    {outfit === "safe" && <g fill="none" stroke="#263b30" strokeWidth="5"><path d="M83 154L106 191 132 154"/></g>}
+    {outfit === "watch" && <path d="M171 91L183 76" stroke="#f6cf53" strokeWidth="5" strokeLinecap="round"/>}
+    {outfit === "high" && <path d="M179 103L195 87M181 119L201 118" stroke="#ffbd45" strokeWidth="5" strokeLinecap="round"/>}
+    {outfit === "evacuation" && <path d="M166 162L196 139" stroke="#ffdf56" strokeWidth="7" strokeLinecap="round"/>}
+  </svg>;
+}
+
 function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience = false, compact = false, deviceTelemetryActive = false }) {
   const moisture = Number(sensors.find(s => s.id === "moisture")?.value || 0);
   const rainfall = Number(sensors.find(s => s.id === "rainfall")?.value || 0);
@@ -179,7 +207,7 @@ function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience 
     </div>
     {usingFallback && <p className="scene-fallback-note" role="status">This scene could not load, so the standard hillside image is shown.</p>}
     {!compact && !audience && <div className="hill-readings">{sensorStates.map(sensor=><span className={sensor.failed ? "reading-failed" : sensor.active ? "reading-active" : ""} key={sensor.id}><b>{sensor.failed ? "—" : `${sensor.value}%`}</b>{sensor.label}</span>)}</div>}
-    {!compact && <div className="hill-explanation"><span className="theva-guide-mark" aria-hidden="true">T</span><div className="theva-guide-copy"><b>Theva says</b><p>{explanation}</p></div></div>}
+    {!compact && <div className="hill-explanation"><span className="theva-guide-mark" aria-hidden="true"><img src="/theva-mark.svg" alt="" /></span><div className="theva-guide-copy"><b>Theva says</b><p>{explanation}</p></div></div>}
     {!compact && <div className="hill-steps"><span className={rainfall >= 35 ? "step-active" : ""}>1 <b>Rain adds water</b></span><i>→</i><span className={moisture >= 35 ? "step-active" : ""}>2 <b>Soil gets heavier</b></span><i>→</i><span className={movement >= 35 ? "step-active" : ""}>3 <b>Ground may move</b></span></div>}
   </section>;
 }
@@ -326,7 +354,7 @@ function PublicDisplay() {
 
   return <main className="public-display">
     <header className="display-header">
-      <a className="brand" href="/" aria-label="Theva Live home"><span className="brand-mark">T</span><span><b>THEVA LIVE</b><small>PUBLIC LEARNING DISPLAY</small></span></a>
+      <a className="brand" href="/" aria-label="Theva Live home"><span className="brand-mark"><img src="/theva-mark.svg" alt="" /></span><span><b>THEVA LIVE</b><small>PUBLIC LEARNING DISPLAY</small></span></a>
       <div className={`display-connection ${connection}`} role="status" aria-live="polite"><i className="dot"/>{connectionText}</div>
       <div className="public-audio-controls" aria-label="Public audio alert controls">
         <span className="audio-enabled-label">{audioEnabled ? (audioReady ? "AUDIO READY" : "AUDIO LOCKED") : "AUDIO DISABLED"}</span>
