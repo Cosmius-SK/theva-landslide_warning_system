@@ -196,6 +196,7 @@ function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience 
           <span className="visual-sensor-pin"><i /></span>
           <span className="visual-sensor-tag">{sensor.label} · {sensor.failed ? "NO SIGNAL" : `${sensor.value}%`}</span>
         </div>)}</div>
+        <div className="hill-theva-corner"><ThevaMascot level={risk.level} /></div>
       </>}
       {imageUnavailable && <div className="landscape-error" role="alert">The hillside image could not be loaded. Sensor readings and the risk state are still available below.</div>}
     </div>
