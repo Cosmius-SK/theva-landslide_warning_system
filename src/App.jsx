@@ -328,14 +328,14 @@ function PublicDisplay() {
     <header className="display-header">
       <a className="brand" href="/" aria-label="Theva Live home"><span className="brand-mark">T</span><span><b>THEVA LIVE</b><small>PUBLIC LEARNING DISPLAY</small></span></a>
       <div className={`display-connection ${connection}`} role="status" aria-live="polite"><i className="dot"/>{connectionText}</div>
-      <div className="public-audio-controls" aria-label="Public audio alert controls">
-        <span className="audio-enabled-label">{audioEnabled ? (audioReady ? "AUDIO READY" : "AUDIO LOCKED") : "AUDIO DISABLED"}</span>
-        {!audioReady && <button type="button" className="audio-control audio-enable" onClick={enablePublicAudio}>Enable sound</button>}
-        {audioReady && <button type="button" className="audio-control audio-enable" onClick={togglePublicAudio}>{audioEnabled ? "Disable audio" : "Enable audio"}</button>}
-        <button type="button" className="audio-control" onClick={testPublicAudio} disabled={!audioEnabled || !audioReady}>Test alert · HIGH</button>
-        <span className="audio-enabled-label" role="status" aria-live="polite">{audioStatus}</span>
-      </div>
     </header>
+    <section className="display-audio-bar" aria-label="Public audio alert controls">
+      <span className="audio-enabled-label">{audioEnabled ? (audioReady ? "AUDIO READY" : "AUDIO LOCKED") : "AUDIO DISABLED"}</span>
+      {!audioReady && <button type="button" className="audio-control audio-enable" onClick={enablePublicAudio}>Enable sound</button>}
+      {audioReady && <button type="button" className="audio-control audio-enable" onClick={togglePublicAudio}>{audioEnabled ? "Disable audio" : "Enable audio"}</button>}
+      <button type="button" className="audio-control" onClick={testPublicAudio} disabled={!audioEnabled || !audioReady}>Test alert · HIGH</button>
+      <span className="audio-status" role="status" aria-live="polite">{audioStatus}</span>
+    </section>
     <div className="display-content">
       <section className={`display-risk ${risk.level.toLowerCase()}`}>
         <div className="eyebrow">CURRENT MODEL INDICATION</div>
