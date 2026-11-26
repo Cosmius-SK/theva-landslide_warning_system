@@ -1061,7 +1061,7 @@ function ThevaApp() {
       </aside>
 
       <main className={"main-content " + (page === "operator" ? `operator-content operator-tab-${operatorMobileTab}` : "")}>
-        <div className="page-heading"><div><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>{page === "operator" ? "Operator console" : page === "diagnostics" ? "System diagnostics" : "Audience feedback"}</h1><p>Monitor the slope model and demonstrate how warning indicators respond.</p></div><div className="page-heading-actions">{page === "operator" && <button className="btn secondary" onClick={() => setPage("welcome")}>Preview audience experience ↗</button>}<button className="btn secondary" onClick={resetSystem} disabled={showOperator && lockStatus !== "active"}><RotateCcw size={15}/> Reset system</button></div></div>
+        <div className="page-heading"><div><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>{page === "operator" ? "Operator console" : page === "diagnostics" ? "System diagnostics" : "Audience feedback"}</h1><p>Monitor the slope model and demonstrate how warning indicators respond.</p></div><div className="page-heading-actions">{page === "operator" && <><a className="btn secondary" href="/display" target="_blank" rel="noopener noreferrer">Open public display ↗</a><button className="btn secondary" onClick={() => setPage("welcome")}>Preview audience experience ↗</button></>}<button className="btn secondary" onClick={resetSystem} disabled={showOperator && lockStatus !== "active"}><RotateCcw size={15}/> Reset system</button></div></div>
 
         {page === "operator" && <>
           <div className="mobile-console-switch" role="tablist" aria-label="Operator console view">
