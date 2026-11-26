@@ -515,11 +515,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 @media(max-width:560px){.public-display{padding:10px;gap:10px}.display-header{min-height:42px}.display-header .brand-mark{width:34px;height:34px;border-radius:10px}.display-header .brand{gap:8px}.display-header .brand b{font-size:11px}.display-header .brand small{font-size:7px}.display-connection{font-size:8px;gap:6px;max-width:46%;text-align:right}.display-content{grid-template-rows:auto auto auto;gap:10px}.display-risk{padding:11px;border-radius:12px;min-height:0;grid-template-columns:1fr auto}.display-risk .eyebrow{font-size:8px}.display-risk h1{font-size:29px}.display-risk>p{font-size:11px}.display-action{font-size:10px}.display-scene-wrap,.display-data{padding:9px;border-radius:12px}.display-section-head h2{font-size:16px}.display-sensors{grid-template-columns:1fr}.display-sensor{padding:9px}.display-disclaimer{font-size:8px;line-height:1.4;letter-spacing:.03em}}
 @media(prefers-reduced-motion:reduce){.display-connection .dot{animation:none!important}}
 
-/* Public audio alert controls */
-.public-audio-controls{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
-.audio-control{border:1px solid #52725d;background:#14291d;color:#e8f3ea;border-radius:9px;padding:9px 12px;font:600 11px var(--mono);cursor:pointer}
+/* Public audio controls: separate row so they remain visible on compact displays */
+.display-audio-bar{display:flex;align-items:center;justify-content:flex-start;gap:9px;flex-wrap:wrap;width:min(1900px,100%);margin:0 auto;padding:10px 12px;border:1px solid #385744;border-radius:12px;background:#10251a}
+.audio-enabled-label{font:700 10px var(--mono);letter-spacing:.08em;color:#a9e6b6;min-width:92px}
+.audio-status{font:10px var(--mono);color:#bfd0c3;flex:1 1 180px}
+.audio-control{border:1px solid #52725d;background:#14291d;color:#e8f3ea;border-radius:9px;min-height:40px;padding:9px 13px;font:600 11px var(--mono);cursor:pointer;touch-action:manipulation}
 .audio-control:hover,.audio-control:focus-visible{border-color:#9be0ad;outline:2px solid #9be0ad55;outline-offset:2px}
 .audio-control:disabled{opacity:.45;cursor:not-allowed}
 .audio-enable{background:#1d5131;border-color:#5b9b6d}
-.audio-enabled-label{font:10px var(--mono);letter-spacing:.08em;color:#a9e6b6}
-@media(max-width:900px){.display-header{flex-wrap:wrap}.public-audio-controls{order:3;width:100%;justify-content:flex-start}.display-connection{margin-left:auto}}
+@media(max-width:560px){.display-audio-bar{gap:7px;padding:9px}.display-audio-bar .audio-enabled-label{flex-basis:100%}.display-audio-bar .audio-control{flex:1 1 auto;min-width:120px;padding:9px 8px;font-size:10px}.audio-status{flex-basis:100%;font-size:9px;line-height:1.4}}
