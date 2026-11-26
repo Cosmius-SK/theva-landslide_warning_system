@@ -385,6 +385,7 @@ function ThevaApp() {
   const [audienceSessionExpiresAt, setAudienceSessionExpiresAt] = useState(null);
   const [audienceSessionUrl, setAudienceSessionUrl] = useState("");
   const [audienceSessionQr, setAudienceSessionQr] = useState("");
+  const [audienceQrExpanded, setAudienceQrExpanded] = useState(false);
   const [audienceSessionError, setAudienceSessionError] = useState("");
   const [operatorActive, setOperatorActive] = useState(false);
   const [operatorHydrated, setOperatorHydrated] = useState(false);
@@ -1061,7 +1062,7 @@ function ThevaApp() {
       </aside>
 
       <main className={"main-content " + (page === "operator" ? `operator-content operator-tab-${operatorMobileTab}` : "")}>
-        <div className="page-heading"><div><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>{page === "operator" ? "Operator console" : page === "diagnostics" ? "System diagnostics" : "Audience feedback"}</h1><p>Monitor the slope model and demonstrate how warning indicators respond.</p></div><div className="page-heading-actions">{page === "operator" && <button className="btn secondary" onClick={() => setPage("welcome")}>Preview audience experience ↗</button>}<button className="btn secondary" onClick={resetSystem} disabled={showOperator && lockStatus !== "active"}><RotateCcw size={15}/> Reset system</button></div></div>
+        <div className="page-heading"><div><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>{page === "operator" ? "Operator console" : page === "diagnostics" ? "System diagnostics" : "Audience feedback"}</h1><p>Monitor the slope model and demonstrate how warning indicators respond.</p></div><div className="page-heading-actions">{page === "operator" && <a className="btn secondary" href="/display" target="_blank" rel="noopener noreferrer">Preview public display ↗</a><button className="btn secondary" onClick={() => setPage("welcome")}>Preview audience experience ↗</button>}<button className="btn secondary" onClick={resetSystem} disabled={showOperator && lockStatus !== "active"}><RotateCcw size={15}/> Reset system</button></div></div>
 
         {page === "operator" && <>
           <div className="mobile-console-switch" role="tablist" aria-label="Operator console view">
@@ -1103,7 +1104,7 @@ function ThevaApp() {
                 {publishError && <p className="session-message" role="status">{publishError}</p>}
                 <div className="audience-session-card">
                   <div className="operator-access-row"><div><b>Audience session</b><small>{audienceSessionActive ? `Active until ${audienceSessionExpiresAt ? new Date(audienceSessionExpiresAt).toLocaleTimeString() : "expiry"}.` : "Server-validated · 7 minutes"}</small></div><div className="audience-session-actions"><button className="btn secondary" onClick={startAudienceSession} disabled={lockStatus !== "active"}>{audienceSessionActive ? "Replace link" : "Start session"}</button>{audienceSessionActive && <button className="btn danger" onClick={endAudienceSession} disabled={lockStatus !== "active"}>End</button>}</div></div>
-                  {audienceSessionActive && audienceSessionUrl && <div className="audience-session-link"><input aria-label="Audience session link" value={audienceSessionUrl} readOnly onFocus={e => e.target.select()} /><button className="btn secondary" onClick={copyAudienceSessionLink}>Copy</button>{audienceSessionQr && <img className="audience-session-qr" src={audienceSessionQr} alt="QR code for the active audience session" />}</div>}
+                  {audienceSessionActive && audienceSessionUrl && <div className="audience-session-link"><input aria-label="Audience session link" value={audienceSessionUrl} readOnly onFocus={e => e.target.select()} /><button className="btn secondary" onClick={copyAudienceSessionLink}>Copy</button>{audienceSessionQr && <button type="button" className={`audience-session-qr-toggle ${audienceQrExpanded ? "expanded" : ""}`} onClick={() => setAudienceQrExpanded(value => !value)} aria-expanded={audienceQrExpanded} aria-label={audienceQrExpanded ? "Collapse audience QR code" : "Enlarge audience QR code"} title={audienceQrExpanded ? "Click to collapse QR code" : "Click to enlarge QR code"}><img className="audience-session-qr" src={audienceSessionQr} alt="QR code for the active audience session" /><small>{audienceQrExpanded ? "Click to collapse" : "Click to enlarge for scanning"}</small></button>}</div>}
                   {audienceSessionActive && !audienceSessionUrl && <small className="session-link-note">Link hidden after reconnect. Replace it to issue a new link.</small>}
                   {audienceSessionError && <p className="session-message" role="status">{audienceSessionError}</p>}
                 </div>
