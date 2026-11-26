@@ -709,3 +709,72 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   object-fit:contain;object-position:center bottom;
   aspect-ratio:auto;background:none!important;
 }
+
+
+/* Sensor panel: three clean reading rows plus a compact device status footer */
+.display-data{
+  display:grid!important;
+  grid-template-rows:auto minmax(0,1fr) auto!important;
+  align-content:stretch;
+  gap:7px!important;
+  min-height:0;
+  overflow:hidden;
+}
+.display-data .display-section-head{margin:0;min-height:34px;align-items:center}
+.display-data .display-sensors{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  grid-template-rows:repeat(3,minmax(48px,1fr))!important;
+  gap:6px!important;
+  min-height:0;
+  flex:initial!important;
+  overflow:hidden;
+}
+.display-data .display-sensor{
+  display:grid!important;
+  grid-template-columns:10px minmax(0,1fr) auto!important;
+  grid-template-rows:auto auto;
+  align-items:center;
+  column-gap:9px;
+  row-gap:2px;
+  min-height:48px!important;
+  height:auto!important;
+  padding:7px 10px!important;
+  overflow:hidden;
+  border-radius:10px;
+}
+.display-data .display-sensor>.dot{grid-column:1;grid-row:1 / span 2;align-self:center}
+.display-data .display-sensor>div{grid-column:2;grid-row:1 / span 2;min-width:0;display:flex;flex-direction:column;gap:2px}
+.display-data .display-sensor b{font-size:clamp(11px,.82vw,13px);line-height:1.15;white-space:normal}
+.display-data .display-sensor small{font-size:8px;line-height:1.15;white-space:normal;overflow-wrap:anywhere}
+.display-data .display-sensor>strong{grid-column:3;grid-row:1 / span 2;align-self:center;font-size:clamp(18px,1.45vw,24px);line-height:1;font-variant-numeric:tabular-nums}
+.display-data .display-meta{display:none!important}
+.display-data .device-telemetry-card{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:4px;
+  min-height:0;
+  padding:7px 9px;
+  margin:0;
+  border-radius:9px;
+  overflow:hidden;
+}
+.display-data .device-telemetry-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.display-data .device-telemetry-heading .card-kicker{font-size:7px;line-height:1.1}
+.display-data .device-telemetry-heading h2{font-size:11px;line-height:1.1;margin:2px 0 0}
+.display-data .device-telemetry-status{font-size:8px;white-space:nowrap}
+.display-data .device-telemetry-card>.simulated-test-label{font-size:7px;line-height:1.1;margin:0}
+.display-data .device-telemetry-empty{font-size:9px;line-height:1.2;margin:0}
+.display-data .device-telemetry-readings,.display-data .device-telemetry-meta{display:none!important}
+.display-data .public-simulation-label{font-size:8px;line-height:1.2;padding:4px 0;margin:0}
+@media(max-width:620px){
+ .display-data{gap:4px!important}
+ .display-data .display-sensors{grid-template-rows:repeat(3,minmax(38px,1fr))!important;gap:4px!important}
+ .display-data .display-sensor{min-height:38px!important;padding:4px 5px!important;column-gap:5px}
+ .display-data .display-sensor b{font-size:8px}
+ .display-data .display-sensor small{font-size:6px}
+ .display-data .display-sensor>strong{font-size:12px}
+ .display-data .device-telemetry-card{padding:4px 5px}
+ .display-data .device-telemetry-heading h2{font-size:9px}
+ .display-data .device-telemetry-empty{font-size:7px}
+}
