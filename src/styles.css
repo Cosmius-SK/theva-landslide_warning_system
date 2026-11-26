@@ -543,3 +543,132 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .audio-control:disabled{opacity:.45;cursor:not-allowed}
 .audio-enable{background:#1d5131;border-color:#5b9b6d}
 @media(max-width:560px){.display-audio-bar{gap:7px;padding:9px}.display-audio-bar .audio-enabled-label{flex-basis:100%}.display-audio-bar .audio-control{flex:1 1 auto;min-width:120px;padding:9px 8px;font-size:10px}.audio-status{flex-basis:100%;font-size:9px;line-height:1.4}}
+
+
+/* THEVA LIVE — immersive single-screen exhibition composition */
+.public-display{
+  height:100svh;min-height:0;max-height:100svh;overflow:hidden;
+  grid-template-rows:auto auto minmax(0,1fr) auto;
+  gap:clamp(6px,.9vh,12px);
+  padding:clamp(9px,1.15vw,18px) clamp(12px,1.7vw,26px) 8px;
+}
+.display-header{min-height:42px;padding:0 0 7px}
+.display-header .brand-mark{width:36px;height:36px}
+.display-audio-bar{min-height:38px;padding:5px 9px;gap:8px;border-radius:10px}
+.audio-control{min-height:30px;padding:5px 10px;font-size:9px}
+.audio-enabled-label{font-size:9px;min-width:78px}
+.audio-status{font-size:9px;flex:1 1 auto}
+.display-content{
+  width:100%;height:100%;min-height:0;max-height:100%;
+  grid-template-columns:minmax(0,1.72fr) minmax(300px,.92fr);
+  grid-template-rows:minmax(64px,auto) minmax(0,1fr) minmax(0,1fr);
+  grid-template-areas:"risk risk" "scene data" "scene theva";
+  gap:clamp(8px,.85vw,13px);
+}
+.display-risk{grid-area:risk;min-height:0;padding:8px 16px;grid-template-columns:minmax(115px,.65fr) minmax(150px,.65fr) minmax(160px,1fr) minmax(190px,1.2fr);gap:10px;border-radius:12px}
+.display-risk h1{font-size:clamp(27px,2.4vw,40px)}
+.display-risk>p{font-size:clamp(10px,.8vw,13px);line-height:1.3}
+.display-action{font-size:clamp(9px,.72vw,11px);padding-left:12px}
+.display-action b{font-size:8px}
+.display-scene-wrap{grid-area:scene;min-height:0;display:flex;flex-direction:column;padding:10px;border-radius:14px;overflow:hidden}
+.display-section-head{flex:0 0 auto;margin-bottom:5px}
+.display-section-head h2{font-size:clamp(15px,1.2vw,20px)}
+.display-scene-wrap .audience-hill{
+  flex:1 1 auto;min-height:0;height:100%;margin:0;padding:0;border:0;
+  display:flex;flex-direction:column;overflow:hidden;background:transparent;
+}
+.display-scene-wrap .audience-hill .hill-scene-head,
+.display-scene-wrap .audience-hill .scene-picker-row,
+.display-scene-wrap .audience-hill .hill-explanation,
+.display-scene-wrap .audience-hill .hill-steps,
+.display-scene-wrap .audience-hill .hill-readings{display:none!important}
+.display-scene-wrap .audience-hill .hill-visual{
+  flex:1 1 auto;min-height:0;height:100%;width:100%;margin:0;
+  aspect-ratio:auto;border-radius:10px;border:1px solid #496b52;
+}
+.display-scene-wrap .audience-hill .hill-visual-image{object-fit:cover}
+.display-scene-wrap .audience-hill .visual-sensor-tag{font-size:clamp(8px,.7vw,11px)}
+.display-data{grid-area:data;min-height:0;overflow:hidden;padding:10px;display:flex;flex-direction:column;gap:6px;border-radius:14px}
+.display-data .display-section-head{margin:0 0 2px}
+.display-data .display-section-head h2{font-size:clamp(15px,1.15vw,19px)}
+.display-sensors{display:grid;grid-template-columns:1fr;gap:5px;min-height:0}
+.display-sensor{min-height:0;padding:6px 8px;gap:8px;border-radius:9px}
+.display-sensor b{font-size:clamp(10px,.78vw,12px)}
+.display-sensor small{font-size:8px}
+.display-sensor strong{font-size:clamp(16px,1.45vw,23px)}
+.display-meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;padding-top:6px;margin-top:2px}
+.display-meta span{font-size:8px;line-height:1.3}
+.display-meta span b{font-size:7px;margin-bottom:2px}
+.public-simulation-label{font-size:8px;line-height:1.25;padding:4px 0;margin:0}
+.display-theva{
+  grid-area:theva;min-width:0;min-height:0;height:100%;overflow:hidden;
+  display:grid;grid-template-columns:minmax(105px,.78fr) minmax(0,1.35fr);
+  align-items:center;gap:8px;padding:8px 10px;border-radius:14px;
+}
+.theva-character-stage{height:100%;min-height:0;max-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+.theva-character-art{
+  display:block;flex:1 1 auto;min-height:0;width:100%;height:100%;
+  aspect-ratio:auto;background-image:url("/images/theva-personas.webp");
+  background-repeat:no-repeat;background-size:200% 200%;background-position:0 0;
+}
+.theva-character-art.theva-watch{background-position:100% 0}
+.theva-character-art.theva-high{background-position:0 100%}
+.theva-character-art.theva-evacuation{background-position:100% 100%}
+.theva-character-caption{flex:0 0 auto;font:700 7px var(--mono);letter-spacing:.08em;color:#a9d8b5;text-align:center}
+.theva-dialogue{min-width:0;overflow:hidden}
+.theva-dialogue .eyebrow{font-size:8px}
+.theva-dialogue h2{font-size:clamp(14px,1.1vw,18px);line-height:1.15;margin:5px 0}
+.theva-dialogue>p{font-size:clamp(10px,.78vw,12px);line-height:1.35}
+.theva-precaution{gap:3px;margin-top:7px;padding:6px 8px;font-size:clamp(9px,.68vw,10px);line-height:1.3}
+.theva-precaution b{font-size:7px}
+.display-disclaimer{padding:5px 8px;font-size:8px;line-height:1.2;border-radius:7px}
+.display-scene-placeholder{flex:1;min-height:0}
+@media(max-height:720px){
+  .public-display{padding:7px 12px 6px;gap:5px}
+  .display-content{grid-template-rows:56px minmax(0,1fr) minmax(0,1fr);gap:6px}
+  .display-risk{padding:5px 10px}
+  .display-theva{padding:5px 8px}
+  .theva-dialogue>p{font-size:9px}
+  .theva-precaution{font-size:8px;margin-top:4px;padding:4px 6px}
+  .display-data{padding:7px;gap:4px}
+}
+@media(max-width:900px){
+  .public-display{height:100svh;min-height:0;overflow:hidden}
+  .display-content{grid-template-columns:minmax(0,1.35fr) minmax(245px,.9fr);grid-template-rows:58px minmax(0,1fr) minmax(0,1fr)}
+  .display-risk{grid-template-columns:105px 120px minmax(0,1fr)}
+  .display-action{display:none}
+  .display-theva{grid-template-columns:minmax(85px,.7fr) minmax(0,1.4fr)}
+}
+@media(max-width:620px){
+  .public-display{padding:6px;gap:5px}
+  .display-header{min-height:32px}
+  .display-header .brand-mark{width:28px;height:28px}
+  .display-header .brand b{font-size:9px}
+  .display-header .brand small{font-size:6px}
+  .display-connection{font-size:7px;max-width:48%;text-align:right}
+  .display-audio-bar{min-height:30px;padding:3px 5px;gap:4px}
+  .audio-enabled-label{font-size:7px;min-width:0}
+  .audio-control{min-height:24px;padding:3px 6px;font-size:7px}
+  .audio-status{display:none}
+  .display-content{grid-template-columns:minmax(0,1.15fr) minmax(150px,.85fr);grid-template-rows:48px minmax(0,1fr) minmax(0,1fr);gap:5px}
+  .display-risk{padding:4px 7px;grid-template-columns:68px 75px minmax(0,1fr);gap:5px}
+  .display-risk .eyebrow{font-size:6px}
+  .display-risk h1{font-size:20px}
+  .display-risk>p{font-size:7px}
+  .display-scene-wrap,.display-data,.display-theva{padding:5px;border-radius:8px}
+  .display-section-head h2{font-size:11px}
+  .display-section-head .eyebrow{font-size:6px}
+  .display-section-head>span:last-child{font-size:7px}
+  .display-sensor{padding:4px;gap:4px}
+  .display-sensor b{font-size:8px}
+  .display-sensor small{display:none}
+  .display-sensor strong{font-size:12px}
+  .display-meta{display:none}
+  .display-theva{grid-template-columns:65px minmax(0,1fr);gap:4px}
+  .theva-character-caption{font-size:5px}
+  .theva-dialogue .eyebrow{font-size:6px}
+  .theva-dialogue h2{font-size:10px}
+  .theva-dialogue>p{font-size:8px}
+  .theva-precaution{font-size:7px;padding:3px 4px;margin-top:4px}
+  .display-disclaimer{font-size:6px;padding:3px}
+}
