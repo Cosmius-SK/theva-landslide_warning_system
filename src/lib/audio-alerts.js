@@ -73,6 +73,7 @@ export async function unlockAudio() {
 
 export function stopAudioAlert() {
   alertGeneration += 1;
+  if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
   if (activeAudio) {
     activeAudio.pause();
     activeAudio.currentTime = 0;
@@ -121,21 +122,48 @@ function playSiren(kind) {
   return duration * 1000 + 200;
 }
 
-function playClip(url) {
+function speakAnnouncement(text, language) {
+  return new Promise((resolve, reject) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+      reject(new Error("Spoken announcement is unavailable in this browser"));
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = language;
+    utterance.rate = language.startsWith("ta") ? 0.88 : 0.96;
+    utterance.onend = resolve;
+    utterance.onerror = event => reject(new Error("Browser speech failed: " + (event.error || "unknown error")));
+    window.speechSynthesis.speak(utterance);
+  });
+}
+
+function playClip(url, fallbackText, language) {
   return new Promise((resolve, reject) => {
     const audio = new Audio(url);
     activeAudio = audio;
     audio.preload = "auto";
     audio.volume = 1;
-    audio.onended = () => { if (activeAudio === audio) activeAudio = null; resolve(); };
-    audio.onerror = () => {
+    let settled = false;
+    const useSpeechFallback = async error => {
+      if (settled) return;
+      settled = true;
       if (activeAudio === audio) activeAudio = null;
-      reject(new Error("Unable to load announcement audio: " + url));
+      try {
+        emitStatus("playing", "Using browser speech for " + language + " announcement");
+        await speakAnnouncement(fallbackText, language);
+        resolve();
+      } catch (speechError) {
+        reject(new Error((error?.message || "Prerecorded announcement unavailable") + "; " + speechError.message));
+      }
     };
-    audio.play().catch(error => {
+    audio.onended = () => {
+      if (settled) return;
+      settled = true;
       if (activeAudio === audio) activeAudio = null;
-      reject(error);
-    });
+      resolve();
+    };
+    audio.onerror = () => { useSpeechFallback(new Error("Unable to load announcement audio: " + url)); };
+    audio.play().catch(useSpeechFallback);
   });
 }
 
@@ -152,9 +180,9 @@ export async function playAudioAlert(kind) {
     const delay = kind === "allClear" ? 0 : playSiren(kind);
     if (delay) await new Promise(resolve => window.setTimeout(resolve, delay));
     if (generation !== alertGeneration) return;
-    await playClip(AUDIO_PATHS[kind].ta);
+    await playClip(AUDIO_PATHS[kind].ta, ALERT_ANNOUNCEMENTS[kind].ta, "ta-IN");
     if (generation !== alertGeneration) return;
-    await playClip(AUDIO_PATHS[kind].en);
+    await playClip(AUDIO_PATHS[kind].en, ALERT_ANNOUNCEMENTS[kind].en, "en-IN");
     if (generation === alertGeneration) emitStatus("complete", kind + ": Tamil and English announcements played");
   } catch (error) {
     if (generation === alertGeneration) emitStatus("error", error && error.message ? error.message : "Audio playback failed");
