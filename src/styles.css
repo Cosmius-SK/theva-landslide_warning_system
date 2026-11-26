@@ -555,14 +555,33 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
  .audience-session-qr-toggle.expanded .audience-session-qr{width:min(76vw,340px);height:min(76vw,340px)}
 }
 
-/* Theva identity and state-aware hillside guide */
-.brand-mark{overflow:hidden;padding:0;background:linear-gradient(145deg,#d5f5d9,#8ed5a5)}
-.brand-mark img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
-.theva-guide-mark{display:grid;place-items:center;overflow:hidden}
-.theva-guide-mark img{width:100%;height:100%;object-fit:cover}
-.hill-visual{position:relative;isolation:isolate}
-.hill-theva-corner{position:absolute;z-index:3;right:clamp(8px,2.2%,28px);bottom:0;width:clamp(78px,13%,166px);height:65%;display:flex;align-items:flex-end;justify-content:center;pointer-events:none;filter:drop-shadow(0 8px 12px #0008)}
-.theva-mascot{width:100%;height:100%;overflow:visible;transform-origin:bottom center;animation:theva-arrive .35s ease-out both}
-@keyframes theva-arrive{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
-.hill-visual .visual-sensors{z-index:2}
-@media(max-width:640px){.hill-theva-corner{width:clamp(64px,19%,104px);height:52%;right:4px}}
+
+/* Preview layout correction: give the cinematic scene its full column width. */
+.operator-workspace{height:auto;min-height:calc(100dvh - 132px);overflow:visible}
+.operator-content{height:auto;min-height:calc(100dvh - 132px);grid-template-rows:auto auto auto;overflow:visible}
+.operator-content .operator-live-layout{grid-template-columns:minmax(0,1.35fr) minmax(340px,.85fr);align-items:stretch;overflow:visible}
+.operator-monitor-panel,.operator-controls-panel{min-width:0;min-height:0}
+.operator-monitor-panel .hill-scene{margin:0;padding:clamp(12px,1.5vw,20px);height:100%}
+.operator-monitor-panel .hill-visual{width:100%;height:auto;aspect-ratio:1672 / 936;min-height:300px}
+.operator-controls-panel{overflow:visible}
+.display-content{height:auto;min-height:calc(100dvh - 120px);overflow:visible}
+.display-layout{min-height:0;grid-template-columns:minmax(0,1.65fr) minmax(330px,.9fr);align-items:stretch}
+.display-scene-wrap,.display-data{min-height:0}
+.display-scene-wrap .audience-hill .hill-visual{height:auto;aspect-ratio:1672 / 936;max-height:none}
+.display-scene-wrap .audience-hill .hill-visual-image{object-fit:cover;object-position:center}
+.display-data{gap:12px}
+.display-sensors{gap:10px}
+.display-sensor{padding:14px 16px}
+.display-meta{gap:10px;padding-top:14px}
+@media(max-width:1050px){
+ .operator-workspace{height:auto;overflow:visible}
+ .operator-content{height:auto;overflow:visible;grid-template-rows:auto auto auto}
+ .operator-content .operator-live-layout,.display-layout{grid-template-columns:minmax(0,1fr)}
+ .operator-monitor-panel .hill-visual{min-height:0}
+}
+@media(max-width:650px){
+ .operator-content{padding:12px}
+ .operator-content .operator-live-layout{gap:12px}
+ .operator-monitor-panel .hill-visual{min-height:220px}
+ .display-scene-wrap .audience-hill .hill-visual{min-height:210px}
+}
