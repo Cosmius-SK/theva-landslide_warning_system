@@ -7,6 +7,7 @@ import { normalizeScene, SCENE_VIEWS, sceneImagePath } from "./lib/scenes";
 import { isCurrentOrNewerUpdate } from "./lib/shared-state";
 import { apiFetch } from "./lib/api-fetch";
 import { simulateSlopeReadings } from "./lib/simulation";
+import { getAudioAlertForTransition, playAudioAlert, stopAudioAlert, unlockAudio } from "./lib/audio-alerts";
 
 const initialSensors = [
   { id: "moisture", name: "Soil moisture", unit: "Moisture", value: 22, icon: Droplets, description: "Water saturation in the slope" },
@@ -88,8 +89,8 @@ function DeviceTelemetryPanel({ deviceTelemetry }) {
   ];
 
   return <section className="device-telemetry-card" aria-label="ESP32 device telemetry">
-    <div className="device-telemetry-heading"><div><div className="card-kicker">ESP32 DEVICE TELEMETRY</div><h2>Simulated test feed</h2></div><span className={`device-telemetry-status ${telemetry?.online ? "online" : "offline"}`} role="status"><i className={`dot ${telemetry?.online ? "online" : "offline"}`}/>{status}</span></div>
-    <strong className="simulated-test-label">SIMULATED TEST ONLY</strong>
+    <div className="device-telemetry-heading"><div><div className="card-kicker">ESP32 DEVICE TELEMETRY</div><h2>Device connection</h2></div><span className={`device-telemetry-status ${telemetry?.online ? "online" : "offline"}`} role="status"><i className={`dot ${telemetry?.online ? "online" : "offline"}`}/>{status}</span></div>
+    {telemetry?.online && <strong className="simulated-test-label">DEVICE DATA · LIVE FEED</strong>}{!telemetry?.online && <strong className="simulated-test-label">DEVICE DATA NOT AVAILABLE</strong>}
     {telemetry ? <>
       <div className="device-telemetry-readings">{sensors.map(([id, label]) => <article className="device-telemetry-reading" key={id}>
         <b>{label}</b><strong>{Number.isFinite(telemetry.readings?.[id]) ? `${telemetry.readings[id]}%` : "—"}</strong><small>SIMULATED TEST ONLY</small>
@@ -191,7 +192,6 @@ function PublicDisplay() {
   const [connection, setConnection] = useState("connecting");
   const updatedAtRef = useRef(null);
   const deviceTelemetry = useDeviceTelemetry(true);
-
   useEffect(() => {
     let stopped = false;
     let timer;
@@ -270,6 +270,49 @@ function PublicDisplay() {
   const risk = assess(effectiveReadings
     ? Object.values(effectiveReadings)
     : state?.sensors?.filter(sensor => sensor.healthy === true).map(sensor => Number(sensor.value)) || []);
+  const [audioEnabled, setAudioEnabled] = useState(true);
+  const [audioReady, setAudioReady] = useState(false);
+  const [audioStatus, setAudioStatus] = useState("Tap Enable sound to unlock browser audio.");
+  const previousRiskLevel = useRef(null);
+  useEffect(() => {
+    const onAudioStatus = event => {
+      const info = event.detail || {};
+      if (info.status === "ready") { setAudioReady(true); setAudioStatus("Sound ready · Tamil then English"); }
+      else if (info.status === "playing") setAudioStatus(info.detail || "Playing announcement");
+      else if (info.status === "complete") setAudioStatus(info.detail || "Announcement complete");
+      else if (["error", "blocked", "needs-unlock"].includes(info.status)) {
+        setAudioReady(false);
+        setAudioStatus(info.detail || "Audio playback failed");
+      }
+    };
+    window.addEventListener("theva-audio-status", onAudioStatus);
+    return () => window.removeEventListener("theva-audio-status", onAudioStatus);
+  }, []);
+  useEffect(() => {
+    const previous = previousRiskLevel.current;
+    previousRiskLevel.current = risk.level;
+    if (!audioEnabled || !audioReady || !previous || previous === risk.level) return;
+    const alert = getAudioAlertForTransition(previous, risk.level);
+    if (alert) playAudioAlert(alert).catch(() => {});
+  }, [risk.level, audioEnabled, audioReady]);
+  useEffect(() => () => stopAudioAlert(), []);
+  async function enablePublicAudio() {
+    const ready = await unlockAudio();
+    setAudioReady(ready);
+    setAudioStatus(ready ? "Sound ready · Tamil then English" : "Sound blocked · check browser audio permissions");
+  }
+  function togglePublicAudio() {
+    setAudioEnabled(current => {
+      const nextEnabled = !current;
+      if (!nextEnabled) stopAudioAlert();
+      return nextEnabled;
+    });
+  }
+  function testPublicAudio() {
+    if (!audioEnabled || !audioReady) return;
+    playAudioAlert("high").catch(() => {});
+  }
+
   const scene = normalizeScene(state?.scene || "panorama");
   const sourceLabel = effectiveReadings ? (autoSimulationActive ? "AUTOMATIC VIRTUAL SIMULATION · SIMULATED TEST ONLY" : "ESP32 DEVICE") : virtualOverrideActive ? "VIRTUAL OVERRIDE" : "AUTOMATIC VIRTUAL FALLBACK";
   const educationalAction = risk.level === "Evacuation" || risk.level === "High"
@@ -280,12 +323,30 @@ function PublicDisplay() {
         ? "Observe the calm hillside, then change a demonstration sensor with the operator."
         : "Waiting for the operator console to publish its first shared reading.";
   const connectionText = connection === "stale" ? "CONNECTION LOST · SHOWING LAST UPDATE" : connection === "offline" ? "OFFLINE · NO LIVE READING" : operatorConnected === false && connection === "live" ? "OPERATOR OFFLINE · LAST SHARED STATE" : operatorConnected === true && connection === "live" ? "LIVE · OPERATOR CONNECTED" : connection === "waiting" ? "WAITING FOR OPERATOR" : "CONNECTING TO CLOUD";
+  const leadingSensor = sensors.filter(sensor => !sensor.failed).sort((a, b) => b.value - a.value)[0];
+  const thevaDialogue = risk.level === "Evacuation"
+    ? "Our model is showing its highest alert. Please move calmly to the safe area your teacher has identified. Do not go near the model slope."
+    : risk.level === "High"
+      ? `The readings are showing a high-risk pattern${leadingSensor ? `, especially ${leadingSensor.name.toLowerCase()} at ${leadingSensor.value}%` : ""}. In our demonstration, follow the teacher's evacuation instructions and keep away from the slope.`
+      : risk.level === "Watch"
+        ? `Let's keep watching the hillside. ${leadingSensor ? `${leadingSensor.name} is currently ${leadingSensor.value}%.` : "A sensor reading is changing."} Tell the operator if you notice the number rising.`
+        : risk.level === "Unavailable"
+          ? "I cannot read all the sensor signals right now. Let's ask the operator to check the sensors before drawing a conclusion."
+          : `The model is currently showing a safe condition. ${leadingSensor ? `${leadingSensor.name} is ${leadingSensor.value}%.` : "The readings are steady."} Keep observing how rain, water in the soil and ground movement are connected.`;
+
 
   return <main className="public-display">
     <header className="display-header">
-      <a className="brand" href="/" aria-label="Theva Live home"><span className="brand-mark">T</span><span><b>THEVA LIVE</b><small>PUBLIC LEARNING DISPLAY</small></span></a>
+      <a className="brand" href="/" aria-label="Theva Live home"><img className="brand-logo" src="/brand/theva-logo.webp" alt="" /><span><b>THEVA LIVE</b><small>PUBLIC LEARNING DISPLAY</small></span></a>
       <div className={`display-connection ${connection}`} role="status" aria-live="polite"><i className="dot"/>{connectionText}</div>
     </header>
+    <section className="display-audio-bar" aria-label="Public audio alert controls">
+      <span className="audio-enabled-label">{audioEnabled ? (audioReady ? "AUDIO READY" : "AUDIO LOCKED") : "AUDIO DISABLED"}</span>
+      {!audioReady && <button type="button" className="audio-control audio-enable" onClick={enablePublicAudio}>Enable sound</button>}
+      {audioReady && <button type="button" className="audio-control audio-enable" onClick={togglePublicAudio}>{audioEnabled ? "Disable audio" : "Enable audio"}</button>}
+      <button type="button" className="audio-control" onClick={testPublicAudio} disabled={!audioEnabled || !audioReady}>Test alert · HIGH</button>
+      <span className="audio-status" role="status" aria-live="polite">{audioStatus}</span>
+    </section>
     <div className="display-content">
       <section className={`display-risk ${risk.level.toLowerCase()}`}>
         <div className="eyebrow">CURRENT MODEL INDICATION</div>
@@ -303,11 +364,23 @@ function PublicDisplay() {
           <i className={`dot ${sensor.failed ? "offline" : "online"}`}/><div><b>{sensor.name}</b><small>{sensor.failed ? "Unavailable" : modelDeviceReadings ? "ESP32 DEVICE · SIMULATED TEST ONLY" : virtualOverrideActive ? "VIRTUAL OVERRIDE · SIMULATED TEST ONLY" : "Simulation input · monitoring"}</small></div><strong>{sensor.failed ? "—" : `${sensor.value}%`}</strong>
         </article>)}</div>
         <div className="display-meta"><span><b>Input mode</b>{sourceLabel}</span><span><b>Last update</b>{updatedAt ? new Date(updatedAt).toLocaleString() : "No shared update received"}</span><span><b>Synchronization</b>{connectionText}</span></div>
-        {!autoSimulationActive && <DeviceTelemetryPanel deviceTelemetry={deviceTelemetry}/>}
+        {!autoSimulationActive && !virtualOverrideActive && state?.mode === "hardware" && <DeviceTelemetryPanel deviceTelemetry={deviceTelemetry}/>}
         {autoSimulationActive && <div className="simulated-test-label public-simulation-label">AUTOMATIC VIRTUAL SIMULATION · VALUES CHANGE EVERY 5 SECONDS · SIMULATED TEST ONLY</div>}
       </aside>
+      <section className={`display-theva ${risk.tone}`} aria-label="Theva's live explanation">
+        <div className="theva-character-stage">
+          <img className="theva-character-art" src={`/images/theva/${({Safe:"theva-explorer",Watch:"theva-scientist",High:"theva-safety",Evacuation:"theva-rescue"}[risk.level] || "theva-explorer")}.webp`} alt={`Theva in ${risk.level.toLowerCase()} field gear`} />
+          <span className="theva-character-caption">THEVA · YOUR SLOPE GUIDE</span>
+        </div>
+        <div className="theva-dialogue">
+          <div className="eyebrow">THEVA EXPLAINS · {risk.level.toUpperCase()}</div>
+          <h2>What do the readings tell us?</h2>
+          <p>{thevaDialogue}</p>
+          <div className="theva-precaution"><b>WHAT SHOULD WE DO?</b><span>{risk.level === "Evacuation" || risk.level === "High" ? "Follow the teacher's safety instructions. This is a classroom model, not a real warning." : risk.level === "Watch" ? "Stay alert, observe changes and discuss the readings with the operator." : risk.level === "Unavailable" ? "Ask the operator to check the unavailable sensor channels." : "Keep learning: watch how each sensor changes the hillside scene."}</span></div>
+        </div>
+      </section>
     </div>
-    <footer className="display-disclaimer">EDUCATIONAL SIMULATION – NOT A REAL-WORLD LANDSLIDE WARNING SYSTEM</footer>
+    <footer className="display-disclaimer">EDUCATIONAL SIMULATION – NOT A REAL-WORLD LANDSLIDE WARNING SYSTEM · AUDIO ALERTS ARE DEMONSTRATION ONLY</footer>
   </main>;
 }
 
