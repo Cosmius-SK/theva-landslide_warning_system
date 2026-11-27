@@ -289,10 +289,14 @@ function PublicDisplay() {
     return () => window.removeEventListener("theva-audio-status", onAudioStatus);
   }, []);
   useEffect(() => {
+    // Do not consume a risk transition until audio is enabled and unlocked.
+    // This preserves an escalation that happens before the visitor taps
+    // "Enable sound", including a page that first loads in Evacuation.
+    if (!audioEnabled || !audioReady) return;
     const previous = previousRiskLevel.current;
+    if (previous === risk.level) return;
+    const alert = getAudioAlertForTransition(previous || "Safe", risk.level);
     previousRiskLevel.current = risk.level;
-    if (!audioEnabled || !audioReady || !previous || previous === risk.level) return;
-    const alert = getAudioAlertForTransition(previous, risk.level);
     if (alert) playAudioAlert(alert).catch(() => {});
   }, [risk.level, audioEnabled, audioReady]);
   useEffect(() => () => stopAudioAlert(), []);
