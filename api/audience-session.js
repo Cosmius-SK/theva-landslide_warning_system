@@ -50,6 +50,30 @@ export function createAudienceSessionHandler({ admin = () => createAdmin(process
         return res.status(200).json({ active, expiresAt: active ? session.expires_at : null });
       }
 
+      if (action === "renew") {
+        const { data: current, error: readError } = await db.from("audience_session").select("operator_owner_id,expires_at,ended_at").eq("id", 1).maybeSingle();
+        if (readError) throw readError;
+        if (!current || current.ended_at || current.operator_owner_id !== operator.claims.ownerId) {
+          return res.status(409).json({ error: "The operator has ended this audience session. Start a new session from the Operator Console." });
+        }
+        const previousExpiry = Date.parse(current.expires_at);
+        if (!Number.isFinite(previousExpiry) || previousExpiry > now()) {
+          return res.status(409).json({ error: "The current audience session has not expired yet." });
+        }
+        const token = makeToken();
+        const startedAt = now();
+        const expiresAt = new Date(startedAt + AUDIENCE_SESSION_SECONDS * 1000).toISOString();
+        const { data: renewed, error: renewError } = await db.from("audience_session").update({
+          token_hash: hashAudienceToken(token),
+          started_at: new Date(startedAt).toISOString(),
+          expires_at: expiresAt,
+          ended_at: null
+        }).eq("id", 1).eq("expires_at", current.expires_at).is("ended_at", null).select("id").maybeSingle();
+        if (renewError) throw renewError;
+        if (!renewed) return res.status(409).json({ error: "The audience session was refreshed elsewhere. Reload the Public Display." });
+        return res.status(200).json({ active: true, token, expiresAt });
+      }
+
       if (action === "start") {
         const token = makeToken();
         const startedAt = now();
