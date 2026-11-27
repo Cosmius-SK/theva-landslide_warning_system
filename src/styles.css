@@ -1060,3 +1060,19 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 @media(max-width:560px){
   .topbar .topbar-brand-logo{width:32px;height:32px;flex-basis:32px}
 }
+
+
+/* Projector-first audience QR: share the live session directly from Public Display */
+.display-data{min-height:0}
+.display-data-main{display:grid;grid-template-columns:minmax(0,1fr) minmax(150px,.58fr);align-items:stretch;gap:10px;min-height:0;flex:1 1 auto}
+.display-data-main .display-sensors{min-height:0;grid-template-rows:repeat(3,minmax(0,1fr))}
+.display-audience-qr{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-width:0;padding:10px 8px;border:1px solid #4b805c;border-radius:13px;background:linear-gradient(145deg,#153a26,#0b2419);text-align:center}
+.display-audience-qr-copy{display:grid;gap:3px}
+.display-audience-qr-copy b{font:800 11px var(--display);letter-spacing:.06em;color:#b5f0c3}
+.display-audience-qr-copy span{font-size:9px;line-height:1.25;color:#d0e2d3}
+.display-audience-qr img{display:block;width:clamp(124px,10vw,184px);max-width:100%;height:auto;aspect-ratio:1;object-fit:contain;padding:6px;border-radius:7px;background:#fff;image-rendering:pixelated}
+.display-audience-qr-placeholder{display:grid;place-items:center;width:clamp(124px,10vw,184px);max-width:100%;aspect-ratio:1;padding:8px;border:1px dashed #6b9675;border-radius:7px;color:#c2d9c7;font:10px var(--mono);line-height:1.4}
+.display-audience-qr>strong{font:800 10px var(--mono);color:#ffe18a}
+.display-audience-qr>small{max-width:210px;font-size:8px;line-height:1.3;color:#f2c9a8;overflow-wrap:anywhere}
+@media(max-width:900px){.display-data-main{grid-template-columns:minmax(0,1fr) 170px;gap:8px}.display-audience-qr{padding:8px 6px}.display-audience-qr img,.display-audience-qr-placeholder{width:142px}}
+@media(max-width:620px){.display-data-main{grid-template-columns:minmax(0,1fr) 116px;gap:6px}.display-audience-qr{padding:6px 4px;gap:5px;border-radius:9px}.display-audience-qr-copy b{font-size:8px}.display-audience-qr-copy span{font-size:7px}.display-audience-qr img,.display-audience-qr-placeholder{width:100px;padding:4px}.display-audience-qr>strong{font-size:7px}.display-audience-qr>small{font-size:6px}}
