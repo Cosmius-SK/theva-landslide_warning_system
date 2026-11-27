@@ -30,6 +30,7 @@ function createMemoryDb(now) {
     const query = {
       select() { return query; },
       eq(key, value) { filters[key] = value; return query; },
+      is(key, value) { filters[key] = value; return query; },
       upsert(value) { operation = "upsert"; rowData = value; return query; },
       update(value) { operation = "update"; rowData = value; return query; },
       maybeSingle() { return Promise.resolve(result()); },
@@ -110,6 +111,34 @@ test("invalid, expired, and operator-ended audience links are rejected", async (
   assert.equal(next.statusCode, 201);
   assert.equal((await request(handler, { action: "end", cookie: operator.cookie })).body.active, false);
   assert.equal((await request(handler, { action: "validate", token })).statusCode, 410);
+});
+
+test("active operator can renew an expired audience session but cannot renew an active or ended one", async () => {
+  let clock = Date.parse("2026-11-22T10:00:00.000Z");
+  const db = createMemoryDb(() => clock);
+  const operator = makeOperatorCookie(clock);
+  db.tables.operator_lock.session_hash = operator.hash;
+  let tokenIndex = 0;
+  const tokens = ["d".repeat(43), "e".repeat(43)];
+  const handler = createAudienceSessionHandler({ admin: () => db, env, now: () => clock, makeToken: () => tokens[tokenIndex++] });
+
+  const started = await request(handler, { action: "start", cookie: operator.cookie });
+  assert.equal(started.statusCode, 201);
+  const earlyRenew = await request(handler, { action: "renew", cookie: operator.cookie });
+  assert.equal(earlyRenew.statusCode, 409);
+
+  clock = Date.parse(started.body.expiresAt) + 1;
+  const renewed = await request(handler, { action: "renew", cookie: operator.cookie });
+  assert.equal(renewed.statusCode, 200);
+  assert.equal(renewed.body.token, tokens[1]);
+  assert.equal(tokenMatchesHash(tokens[1], db.tables.audience_session.token_hash), true);
+  assert.equal((await request(handler, { action: "validate", token: started.body.token })).statusCode, 401);
+  assert.equal((await request(handler, { action: "validate", token: renewed.body.token })).statusCode, 200);
+
+  await request(handler, { action: "end", cookie: operator.cookie });
+  clock = Date.parse(renewed.body.expiresAt) + 1;
+  const endedRenew = await request(handler, { action: "renew", cookie: operator.cookie });
+  assert.equal(endedRenew.statusCode, 409);
 });
 
 test("session token comparison is hash-only and expiry is server-side", () => {
