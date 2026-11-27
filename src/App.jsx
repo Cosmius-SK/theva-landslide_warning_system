@@ -121,7 +121,7 @@ function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience 
   const visualDescription = `Hillside simulation. Model state: ${risk.level}. Rainfall ${rainfallSensor.failed ? "unavailable" : `${rainfall}%`}; soil moisture ${moistureSensor.failed ? "unavailable" : `${moisture}%`}; ground movement ${movementSensor.failed ? "unavailable" : `${movement}%`}.`;
   const fallbackImage = "/images/theva-cinematic-hillside.png";
   // Audience Preview uses the dedicated cinematic hillside artwork; operator/public display retain risk-specific scenes.
-  const sceneImage = audience ? fallbackImage : sceneImagePath(risk.level, scene);
+  const sceneImage = sceneImagePath(risk.level, scene);
   const usingFallback = imageError === sceneImage;
   const imageUnavailable = imageError === fallbackImage;
   const displayedImage = usingFallback ? fallbackImage : sceneImage;
@@ -167,7 +167,7 @@ function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience 
         </svg>
         <div className="visual-sensors" aria-hidden="true">{sensorStates.map(sensor => <div className={`visual-sensor ${sensor.id} ${sensor.active ? "active" : ""} ${sensor.failed ? "failed" : ""}`} key={sensor.id} style={{ left: `${sensor.x}%`, top: `${sensor.y}%` }}>
           <span className="visual-sensor-pin"><i /></span>
-          <span className="visual-sensor-tag">{sensor.label} · {sensor.failed ? "NO SIGNAL" : `${sensor.value}%`}</span>
+          <span className="visual-sensor-tag">{sensor.label} · {sensor.failed ? "NO SIGNAL" : `${sensor.value}${sensor.id === "rainfall" ? " mm/h" : sensor.id === "movement" ? " mm" : "%"}`}</span>
         </div>)}</div>
       </>}
       {imageUnavailable && <div className="landscape-error" role="alert">The hillside image could not be loaded. Sensor readings and the risk state are still available below.</div>}
