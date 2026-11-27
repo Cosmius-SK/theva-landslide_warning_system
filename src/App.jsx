@@ -1145,17 +1145,31 @@ function ThevaApp() {
     </div>}
 
     {page === "audience-loading" && <main className="form-page centered" aria-live="polite"><div className="eyebrow">CHECKING SESSION LINK</div><h1>Getting the live demonstration ready…</h1><p>The session link is being checked with the operator.</p></main>}
-    {page === "audience" && <main className="audience-page">
+    {page === "audience" && <main className="audience-page audience-preview-v2">
       <div className="audience-top"><span className="pill live-pill"><i className="dot online"/> LIVE DEMONSTRATION</span><span className="timer">SESSION ENDS IN {Math.floor(secondsLeft/60)}:{String(secondsLeft%60).padStart(2,"0")}</span></div>
-      <div className="audience-title"><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>Small signals. Safer slopes.</h1><p>Watch rain and ground changes affect the hillside model.</p></div>
-      <HillScene sensors={audienceSensors} risk={audienceRisk} scene={audienceScene} audience deviceTelemetryActive={Boolean(audienceDeviceReadings)} />
-      <aside className="audience-summary">
-        <div className={"audience-risk " + audienceRisk.tone}><span>CURRENT MODEL INDICATION</span><h2>{audienceRisk.level}</h2><p>{audienceRisk.message}</p>{audienceSensors.some(s => s.failed) && <small>One or more sensors are unavailable. Other healthy readings still help the model.</small>}</div>
-        <div className="audience-sensors">{audienceSensors.map(s => <div className={"audience-sensor " + (s.failed ? "failed" : "")} key={s.id}><span className={"dot " + (s.failed ? "offline" : "online")}/><b>{s.name}</b><strong>{s.failed ? "—" : `${s.value}%`}</strong><small>{s.failed ? "Sensor unavailable" : "Monitoring active"}</small></div>)}</div>
-        <div className="audience-session-meta"><span>{audienceDeviceReadings ? "ESP32 DEVICE · SIMULATED TEST ONLY" : audienceVirtualOverrideActive ? "VIRTUAL OVERRIDE · SIMULATED TEST ONLY" : "AUTOMATIC VIRTUAL FALLBACK"}</span><span>{sharedUpdatedAt ? "Updated " + new Date(sharedUpdatedAt).toLocaleTimeString() : "Waiting for operator data"}</span><span>Cloud {syncStatus}</span></div>
-        <p className="disclaimer">Educational demonstration only. This is not a real landslide warning service.</p>
-        <button className="btn secondary audience-feedback-button" onClick={() => setPage("feedback")}>Share feedback</button>
-      </aside>
+      <header className="audience-title audience-hero-title"><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>Small signals. <em>Safer slopes.</em></h1><p>Watch how changing rain, soil moisture and ground movement affect our hillside model.</p></header>
+      <div className="audience-preview-grid">
+        <section className="audience-hero-scene" aria-label="Live hillside model">
+          <div className="audience-scene-label"><span>LIVE HILLSIDE MODEL</span><span>{audienceScene === "panorama" ? "PANORAMA" : audienceScene.toUpperCase()}</span></div>
+          <HillScene sensors={audienceSensors} risk={audienceRisk} scene={audienceScene} audience deviceTelemetryActive={Boolean(audienceDeviceReadings)} />
+          <div className={`audience-theva-overlay ${audienceRisk.tone}`}>
+            <img src={`/images/theva/${({Safe:"theva-explorer",Watch:"theva-scientist",High:"theva-safety",Evacuation:"theva-rescue"}[audienceRisk.level] || "theva-explorer")}.webp`} alt={`Theva in ${audienceRisk.level.toLowerCase()} field gear`}/>
+            <div><span className="eyebrow">THEVA EXPLAINS · {audienceRisk.level.toUpperCase()}</span><h2>What do the readings tell us?</h2><p>{audienceRisk.level === "Evacuation" ? "Our model is showing its highest alert. Move calmly to the safe area your teacher has identified and stay with your group." : audienceRisk.level === "High" ? "The readings show a high-risk pattern. In our demonstration, follow your teacher's safety instructions and keep away from the model slope." : audienceRisk.level === "Watch" ? "Let's keep watching the hillside. Some readings are changing. Stay alert and discuss what you notice." : audienceRisk.level === "Unavailable" ? "I cannot read all the sensor signals. Let's ask the operator to check the sensors." : "The model is showing a safe condition. Keep observing how rain, water in the soil and ground movement are connected."}</p></div>
+          </div>
+        </section>
+        <aside className="audience-preview-side">
+          <section className={`audience-risk ${audienceRisk.tone}`}>
+            <span>CURRENT MODEL INDICATION</span><h2>{audienceRisk.level}</h2><p>{audienceRisk.message}</p>{audienceSensors.some(sensor => sensor.failed) && <small>One or more sensor channels are unavailable.</small>}
+            <div className="audience-risk-scale"><span className="safe">●</span><span className="watch">●</span><span className="high">●</span><span className="critical">●</span><span className="na">●</span></div>
+            <div className="audience-risk-labels"><span>Safe</span><span>Watch</span><span>High</span><span>Evacuation</span><span>N/A</span></div>
+          </section>
+          <section className="audience-readings-card"><div className="eyebrow">SENSOR CHANNELS</div><h2>Live model readings</h2><div className="audience-sensors">{audienceSensors.map(sensor => <div className={`audience-sensor ${sensor.failed ? "failed" : ""}`} key={sensor.id}><i className={`dot ${sensor.failed ? "offline" : "online"}`}/><b>{sensor.name}</b><strong>{sensor.failed ? "—" : `${sensor.value}%`}</strong><small>{sensor.failed ? "Unavailable" : "Monitoring active"}</small></div>)}</div></section>
+          <section className={`audience-precautions ${audienceRisk.tone}`}><h2>Precaution for {audienceRisk.level}</h2><div className="audience-precaution-grid"><article><b>01 · STAY ALERT</b><span>{audienceRisk.level === "Evacuation" || audienceRisk.level === "High" ? "Keep away from the model slope" : audienceRisk.level === "Watch" ? "Be alert in slope areas" : "Observe changes carefully"}</span></article><article><b>02 · FOLLOW ADVICE</b><span>{audienceRisk.level === "Evacuation" || audienceRisk.level === "High" ? "Follow your teacher's instructions" : audienceRisk.level === "Watch" ? "Avoid unnecessary travel near steep slopes" : "Discuss readings with the operator"}</span></article><article><b>03 · BE PREPARED</b><span>{audienceRisk.level === "Evacuation" ? "Stay in the safe area with your group" : audienceRisk.level === "High" || audienceRisk.level === "Watch" ? "Be prepared to move to a safer place" : "Keep learning how slopes respond"}</span></article></div></section>
+        </aside>
+      </div>
+      <div className="audience-session-meta"><span>{audienceDeviceReadings ? "ESP32 DEVICE · SIMULATED TEST ONLY" : audienceVirtualOverrideActive ? "VIRTUAL OVERRIDE · SIMULATED TEST ONLY" : "AUTOMATIC VIRTUAL FALLBACK"}</span><span>{sharedUpdatedAt ? "Updated " + new Date(sharedUpdatedAt).toLocaleTimeString() : "Waiting for operator data"}</span><span>Cloud {syncStatus}</span></div>
+      <p className="disclaimer">A learning model · Not a real-world prediction system · Audio alerts are demonstration only</p>
+      <button className="btn secondary audience-feedback-button" onClick={() => setPage("feedback")}>Share feedback</button>
     </main>}
 
     {page === "welcome" && <main className="welcome-page"><div className="welcome-art"><div className="mountain m1"/><div className="mountain m2"/><div className="sun"/></div><div className="welcome-content"><div className="eyebrow">A GRADE 2 SCIENCE PROJECT</div><h1>Small signals.<br/><em>Safer slopes.</em></h1><p className="welcome-lead">I'm Theva, and I'm exploring how technology can help detect landslide danger and protect lives.</p><div className="welcome-info"><span><ShieldCheck/> Learn how early warnings work</span><span><Activity/> Explore changing slope conditions</span><span><Radio/> Watch a live demonstration</span></div>{audienceSessionError && <p className="session-message" role="status">{audienceSessionError}</p>}<p className="welcome-note">Open the active audience session link shared by your operator to start the live demonstration.</p><small className="welcome-note">A learning model · Not a real-world prediction system</small></div></main>}
