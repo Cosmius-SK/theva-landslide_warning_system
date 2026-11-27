@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { Activity, AlertTriangle, CheckCircle2, CloudRain, Droplets, Gauge, Radio, RotateCcw, ShieldCheck, Signal, WifiOff } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, CloudRain, Droplets, Footprints, Gauge, House, Radio, RotateCcw, ShieldCheck, Signal, Users, WifiOff } from "lucide-react";
 import { realtimeEnabled, supabase } from "./lib/supabase";
 import { assess } from "./lib/risk";
 import { normalizeScene, SCENE_VIEWS, sceneImagePath } from "./lib/scenes";
@@ -380,8 +380,16 @@ function PublicDisplay() {
           <div className="eyebrow">THEVA EXPLAINS · {risk.level.toUpperCase()}</div>
           <h2>What do the readings tell us?</h2>
           <p>{thevaDialogue}</p>
-          <div className="theva-precaution"><b>WHAT SHOULD WE DO?</b><span>{risk.level === "Evacuation" || risk.level === "High" ? "Follow the teacher's safety instructions. This is a classroom model, not a real warning." : risk.level === "Watch" ? "Stay alert, observe changes and discuss the readings with the operator." : risk.level === "Unavailable" ? "Ask the operator to check the unavailable sensor channels." : "Keep learning: watch how each sensor changes the hillside scene."}</span></div>
         </div>
+      </section>
+      <section className={`display-precautions ${risk.tone}`} aria-label="Precautions for the current model indication">
+        <div className="precautions-heading"><ShieldCheck size={19}/><h2>Precaution for {risk.level}</h2></div>
+        <div className="precautions-grid">
+          <article><Footprints/><b>{risk.level === "Evacuation" ? "Move to safety" : risk.level === "High" ? "Stay away" : risk.level === "Watch" ? "Be alert" : risk.level === "Unavailable" ? "Check sensors" : "Keep observing"}</b><span>{risk.level === "Evacuation" ? "Move calmly to the safe area identified by your teacher" : risk.level === "High" ? "Keep away from the model slope and follow instructions" : risk.level === "Watch" ? "Be alert in slope areas" : risk.level === "Unavailable" ? "Ask the operator to check unavailable channels" : "Notice changes in the hillside model"}</span></article>
+          <article><Users/><b>{risk.level === "Evacuation" ? "Follow guidance" : risk.level === "High" ? "Follow advice" : risk.level === "Watch" ? "Avoid travel" : risk.level === "Unavailable" ? "Wait for updates" : "Discuss readings"}</b><span>{risk.level === "Evacuation" ? "Listen to your teacher and stay with the group" : risk.level === "High" ? "Follow the teacher's safety instructions" : risk.level === "Watch" ? "Avoid unnecessary travel near steep slopes" : risk.level === "Unavailable" ? "Do not draw conclusions until readings return" : "Talk about which sensor is changing"}</span></article>
+          <article><House/><b>{risk.level === "Evacuation" ? "Stay in safety" : risk.level === "High" ? "Be prepared" : risk.level === "Watch" ? "Be prepared" : risk.level === "Unavailable" ? "Ask for help" : "Keep learning"}</b><span>{risk.level === "Evacuation" ? "Remain in the safe area until your teacher advises otherwise" : risk.level === "High" || risk.level === "Watch" ? "Be prepared to move to a safer place if conditions worsen" : risk.level === "Unavailable" ? "Ask the operator or teacher what to do next" : "Explore how rain and soil moisture affect slopes"}</span></article>
+        </div>
+        <p className="precautions-note">Classroom learning guidance only · Not a real-world warning</p>
       </section>
     </div>
     <footer className="display-disclaimer">EDUCATIONAL SIMULATION – NOT A REAL-WORLD LANDSLIDE WARNING SYSTEM · AUDIO ALERTS ARE DEMONSTRATION ONLY</footer>
