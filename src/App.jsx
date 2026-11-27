@@ -190,8 +190,125 @@ function PublicDisplay() {
   const [updatedAt, setUpdatedAt] = useState(null);
   const [operatorConnected, setOperatorConnected] = useState(null);
   const [connection, setConnection] = useState("connecting");
+  const [audienceQr, setAudienceQr] = useState("");
+  const [audienceQrExpiresAt, setAudienceQrExpiresAt] = useState(null);
+  const [audienceQrRemaining, setAudienceQrRemaining] = useState(0);
+  const [audienceQrStatus, setAudienceQrStatus] = useState("waiting");
+  const [audienceQrMessage, setAudienceQrMessage] = useState("");
+  const audienceQrExpiryRef = useRef(0);
+  const audienceQrRenewingRef = useRef(false);
   const updatedAtRef = useRef(null);
   const deviceTelemetry = useDeviceTelemetry(true);
+
+  useEffect(() => {
+    let stopped = false;
+    let tick;
+    const storageKey = "theva_public_audience_session";
+    const readStoredSession = () => {
+      try {
+        const value = window.localStorage.getItem(storageKey);
+        return value ? JSON.parse(value) : null;
+      } catch { return null; }
+    };
+    const renderSessionQr = async session => {
+      if (!session?.token || !session?.expiresAt) {
+        setAudienceQr("");
+        setAudienceQrExpiresAt(null);
+        audienceQrExpiryRef.current = 0;
+        setAudienceQrStatus("waiting");
+        setAudienceQrMessage("Start an audience session in the Operator Console to display the scan code.");
+        return;
+      }
+      const expiry = Date.parse(session.expiresAt);
+      if (!Number.isFinite(expiry) || expiry <= Date.now()) {
+        audienceQrExpiryRef.current = expiry || 0;
+        setAudienceQrExpiresAt(session.expiresAt);
+        setAudienceQrStatus("expired");
+        setAudienceQrMessage("Refreshing the audience link…");
+        return;
+      }
+      try {
+        const url = window.location.origin + "/audience#session=" + encodeURIComponent(session.token);
+        const image = await QRCode.toDataURL(url, { errorCorrectionLevel: "H", margin: 4, width: 420 });
+        if (stopped) return;
+        audienceQrExpiryRef.current = expiry;
+        setAudienceQr(image);
+        setAudienceQrExpiresAt(session.expiresAt);
+        setAudienceQrRemaining(Math.max(0, Math.ceil((expiry - Date.now()) / 1000)));
+        setAudienceQrStatus("active");
+        setAudienceQrMessage("");
+      } catch {
+        if (!stopped) {
+          setAudienceQrStatus("error");
+          setAudienceQrMessage("The QR code could not be generated. Restart the audience session.");
+        }
+      }
+    };
+    const renewSession = async () => {
+      if (stopped || audienceQrRenewingRef.current) return;
+      audienceQrRenewingRef.current = true;
+      setAudienceQrStatus("refreshing");
+      setAudienceQrMessage("Refreshing scan link…");
+      try {
+        const response = await apiFetch("/api/audience-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "renew" }),
+          cache: "no-store"
+        }, 8_000);
+        const data = await readJsonResponse(response);
+        if (!response.ok) throw new Error(data.error || "The audience session could not be renewed.");
+        const session = { token: data.token, expiresAt: data.expiresAt };
+        window.localStorage.setItem(storageKey, JSON.stringify(session));
+        await renderSessionQr(session);
+      } catch (error) {
+        if (!stopped) {
+          setAudienceQrStatus("error");
+          setAudienceQrMessage(error.message || "Open the Public Display from the active Operator Console to renew the QR code.");
+        }
+      } finally {
+        audienceQrRenewingRef.current = false;
+      }
+    };
+    const syncFromStorage = () => {
+      const session = readStoredSession();
+      if (session) renderSessionQr(session);
+      else {
+        setAudienceQr("");
+        setAudienceQrExpiresAt(null);
+        audienceQrExpiryRef.current = 0;
+        setAudienceQrStatus("waiting");
+        setAudienceQrMessage("Start an audience session in the Operator Console to display the scan code.");
+      }
+    };
+    syncFromStorage();
+    const onStorage = event => { if (event.key === storageKey) syncFromStorage(); };
+    const updateCountdown = () => {
+      const expiry = audienceQrExpiryRef.current;
+      if (!expiry) return;
+      const remaining = Math.ceil((expiry - Date.now()) / 1000);
+      setAudienceQrRemaining(Math.max(0, remaining));
+      if (remaining <= 0) renewSession();
+    };
+    tick = window.setInterval(updateCountdown, 1000);
+    const onWake = () => {
+      if (document.visibilityState === "visible") {
+        if (audienceQrExpiryRef.current && audienceQrExpiryRef.current <= Date.now()) renewSession();
+        else syncFromStorage();
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", onWake);
+    document.addEventListener("visibilitychange", onWake);
+    return () => {
+      stopped = true;
+      clearInterval(tick);
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", onWake);
+      document.removeEventListener("visibilitychange", onWake);
+    };
+  }, []);
+
   useEffect(() => {
     let stopped = false;
     let timer;
@@ -364,9 +481,17 @@ function PublicDisplay() {
       </section>
       <aside className="display-data">
         <div className="display-section-head"><div><div className="eyebrow">SENSOR CHANNELS</div><h2>Model readings</h2></div><span>{sensors.filter(sensor => !sensor.failed).length}/3 available</span></div>
+        <div className="display-data-main">
         <div className="display-sensors">{sensors.map(sensor => <article className={`display-sensor ${sensor.failed ? "failed" : ""}`} key={sensor.id}>
           <i className={`dot ${sensor.failed ? "offline" : "online"}`}/><div><b>{sensor.name}</b><small>{sensor.failed ? "Unavailable" : modelDeviceReadings ? "ESP32 DEVICE · SIMULATED TEST ONLY" : virtualOverrideActive ? "VIRTUAL OVERRIDE · SIMULATED TEST ONLY" : "Simulation input · monitoring"}</small></div><strong>{sensor.failed ? "—" : `${sensor.value}%`}</strong>
         </article>)}</div>
+          <aside className="display-audience-qr" aria-label="Scan to open Theva Live on your phone">
+            <div className="display-audience-qr-copy"><b>JOIN THEVA LIVE</b><span>Scan with your phone camera</span></div>
+            {audienceQr ? <img src={audienceQr} alt="QR code to open the active Theva Live audience session"/> : <div className="display-audience-qr-placeholder">{audienceQrStatus === "refreshing" || audienceQrStatus === "expired" ? "Refreshing…" : "QR unavailable"}</div>}
+            <strong>{audienceQrStatus === "active" ? "Refreshes in " + Math.floor(audienceQrRemaining/60) + ":" + String(audienceQrRemaining%60).padStart(2,"0") : audienceQrStatus === "refreshing" ? "Refreshing session" : "Awaiting session"}</strong>
+            {audienceQrMessage && <small role="status">{audienceQrMessage}</small>}
+          </aside>
+        </div>
         <div className="display-meta"><span><b>Input mode</b>{sourceLabel}</span><span><b>Last update</b>{updatedAt ? new Date(updatedAt).toLocaleString() : "No shared update received"}</span><span><b>Synchronization</b>{connectionText}</span></div>
         {!autoSimulationActive && !virtualOverrideActive && state?.mode === "hardware" && <DeviceTelemetryPanel deviceTelemetry={deviceTelemetry}/>}
         {autoSimulationActive && <div className="simulated-test-label public-simulation-label">AUTOMATIC VIRTUAL SIMULATION · VALUES CHANGE EVERY 5 SECONDS · SIMULATED TEST ONLY</div>}
@@ -982,6 +1107,7 @@ function ThevaApp() {
       setAudienceSessionExpiresAt(data.expiresAt);
       const sessionUrl = `${window.location.origin}/audience#session=${encodeURIComponent(data.token)}`;
       setAudienceSessionUrl(sessionUrl);
+      window.localStorage.setItem("theva_public_audience_session", JSON.stringify({ token: data.token, expiresAt: data.expiresAt }));
       try {
         const qr = await QRCode.toDataURL(sessionUrl, { errorCorrectionLevel: "M", margin: 2, width: 240 });
         setAudienceSessionQr(qr);
@@ -997,6 +1123,7 @@ function ThevaApp() {
       setAudienceSessionUrl("");
       setAudienceSessionQr("");
       setAudienceSessionError("");
+      window.localStorage.removeItem("theva_public_audience_session");
     } catch (error) { setAudienceSessionError(error.message); }
   }
 
@@ -1031,6 +1158,7 @@ function ThevaApp() {
         setAudienceSessionExpiresAt(null);
         setAudienceSessionUrl("");
         setAudienceSessionQr("");
+        window.localStorage.removeItem("theva_public_audience_session");
       } catch (error) { sessionError = `Demo reset, but its audience session could not be ended: ${error.message}`; }
     }
     setFaults([]);
