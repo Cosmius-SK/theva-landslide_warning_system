@@ -115,8 +115,8 @@ function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience 
   const rainfallSensor = sensorStates.find(sensor => sensor.id === "rainfall");
   const movementSensor = sensorStates.find(sensor => sensor.id === "movement");
   const [imageError, setImageError] = useState(null);
-  const rainOpacity = Math.min(0.9, rainfall / 100);
-  const seepageOpacity = Math.max(0, Math.min(0.9, (moisture - 20) / 80));
+  const rainOpacity = rainfall >= 35 ? Math.min(0.9, rainfall / 100) : 0;
+  const seepageOpacity = moisture >= 35 ? Math.max(0, Math.min(0.9, (moisture - 20) / 80)) : 0;
   const movementOpacity = Math.max(0, Math.min(0.95, movement / 100));
   const visualDescription = `Hillside simulation. Model state: ${risk.level}. Rainfall ${rainfallSensor.failed ? "unavailable" : `${rainfall}%`}; soil moisture ${moistureSensor.failed ? "unavailable" : `${moisture}%`}; ground movement ${movementSensor.failed ? "unavailable" : `${movement}%`}.`;
   const fallbackImage = "/images/theva-cinematic-hillside.png";
