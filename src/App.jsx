@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { Activity, AlertTriangle, CheckCircle2, CloudRain, Droplets, Gauge, Radio, RotateCcw, ShieldCheck, Signal, WifiOff } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, CloudRain, Droplets, Footprints, Gauge, House, Radio, RotateCcw, ShieldCheck, Signal, Users, WifiOff } from "lucide-react";
 import { realtimeEnabled, supabase } from "./lib/supabase";
 import { assess } from "./lib/risk";
 import { normalizeScene, SCENE_VIEWS, sceneImagePath } from "./lib/scenes";
@@ -119,8 +119,9 @@ function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience 
   const seepageOpacity = Math.max(0, Math.min(0.9, (moisture - 20) / 80));
   const movementOpacity = Math.max(0, Math.min(0.95, movement / 100));
   const visualDescription = `Hillside simulation. Model state: ${risk.level}. Rainfall ${rainfallSensor.failed ? "unavailable" : `${rainfall}%`}; soil moisture ${moistureSensor.failed ? "unavailable" : `${moisture}%`}; ground movement ${movementSensor.failed ? "unavailable" : `${movement}%`}.`;
-  const sceneImage = sceneImagePath(risk.level, scene);
   const fallbackImage = "/images/theva-cinematic-hillside.png";
+  // Audience Preview uses the dedicated cinematic hillside artwork; operator/public display retain risk-specific scenes.
+  const sceneImage = audience ? fallbackImage : sceneImagePath(risk.level, scene);
   const usingFallback = imageError === sceneImage;
   const imageUnavailable = imageError === fallbackImage;
   const displayedImage = usingFallback ? fallbackImage : sceneImage;
@@ -1146,29 +1147,40 @@ function ThevaApp() {
 
     {page === "audience-loading" && <main className="form-page centered" aria-live="polite"><div className="eyebrow">CHECKING SESSION LINK</div><h1>Getting the live demonstration ready…</h1><p>The session link is being checked with the operator.</p></main>}
     {page === "audience" && <main className="audience-page audience-preview-v2">
-      <div className="audience-top"><span className="pill live-pill"><i className="dot online"/> LIVE DEMONSTRATION</span><span className="timer">SESSION ENDS IN {Math.floor(secondsLeft/60)}:{String(secondsLeft%60).padStart(2,"0")}</span></div>
-      <header className="audience-title audience-hero-title"><div className="eyebrow">THEVA'S SCIENCE PROJECT</div><h1>Small signals. <em>Safer slopes.</em></h1><p>Watch how changing rain, soil moisture and ground movement affect our hillside model.</p></header>
-      <div className="audience-preview-grid">
-        <section className="audience-hero-scene" aria-label="Live hillside model">
-          <div className="audience-scene-label"><span>LIVE HILLSIDE MODEL</span><span>{audienceScene === "panorama" ? "PANORAMA" : audienceScene.toUpperCase()}</span></div>
-          <HillScene sensors={audienceSensors} risk={audienceRisk} scene={audienceScene} audience deviceTelemetryActive={Boolean(audienceDeviceReadings)} />
-          <div className={`audience-theva-overlay ${audienceRisk.tone}`}>
-            <img src={`/images/theva/${({Safe:"theva-explorer",Watch:"theva-scientist",High:"theva-safety",Evacuation:"theva-rescue"}[audienceRisk.level] || "theva-explorer")}.webp`} alt={`Theva in ${audienceRisk.level.toLowerCase()} field gear`}/>
-            <div><span className="eyebrow">THEVA EXPLAINS · {audienceRisk.level.toUpperCase()}</span><h2>What do the readings tell us?</h2><p>{audienceRisk.level === "Evacuation" ? "Our model is showing its highest alert. Move calmly to the safe area your teacher has identified and stay with your group." : audienceRisk.level === "High" ? "The readings show a high-risk pattern. In our demonstration, follow your teacher's safety instructions and keep away from the model slope." : audienceRisk.level === "Watch" ? "Let's keep watching the hillside. Some readings are changing. Stay alert and discuss what you notice." : audienceRisk.level === "Unavailable" ? "I cannot read all the sensor signals. Let's ask the operator to check the sensors." : "The model is showing a safe condition. Keep observing how rain, water in the soil and ground movement are connected."}</p></div>
-          </div>
-        </section>
-        <aside className="audience-preview-side">
-          <section className={`audience-risk ${audienceRisk.tone}`}>
-            <span>CURRENT MODEL INDICATION</span><h2>{audienceRisk.level}</h2><p>{audienceRisk.message}</p>{audienceSensors.some(sensor => sensor.failed) && <small>One or more sensor channels are unavailable.</small>}
-            <div className="audience-risk-scale"><span className="safe">●</span><span className="watch">●</span><span className="high">●</span><span className="critical">●</span><span className="na">●</span></div>
-            <div className="audience-risk-labels"><span>Safe</span><span>Watch</span><span>High</span><span>Evacuation</span><span>N/A</span></div>
-          </section>
-          <section className="audience-readings-card"><div className="eyebrow">SENSOR CHANNELS</div><h2>Live model readings</h2><div className="audience-sensors">{audienceSensors.map(sensor => <div className={`audience-sensor ${sensor.failed ? "failed" : ""}`} key={sensor.id}><i className={`dot ${sensor.failed ? "offline" : "online"}`}/><b>{sensor.name}</b><strong>{sensor.failed ? "—" : `${sensor.value}%`}</strong><small>{sensor.failed ? "Unavailable" : "Monitoring active"}</small></div>)}</div></section>
-          <section className={`audience-precautions ${audienceRisk.tone}`}><h2>Precaution for {audienceRisk.level}</h2><div className="audience-precaution-grid"><article><b>01 · STAY ALERT</b><span>{audienceRisk.level === "Evacuation" || audienceRisk.level === "High" ? "Keep away from the model slope" : audienceRisk.level === "Watch" ? "Be alert in slope areas" : "Observe changes carefully"}</span></article><article><b>02 · FOLLOW ADVICE</b><span>{audienceRisk.level === "Evacuation" || audienceRisk.level === "High" ? "Follow your teacher's instructions" : audienceRisk.level === "Watch" ? "Avoid unnecessary travel near steep slopes" : "Discuss readings with the operator"}</span></article><article><b>03 · BE PREPARED</b><span>{audienceRisk.level === "Evacuation" ? "Stay in the safe area with your group" : audienceRisk.level === "High" || audienceRisk.level === "Watch" ? "Be prepared to move to a safer place" : "Keep learning how slopes respond"}</span></article></div></section>
-        </aside>
-      </div>
+      <div className="audience-top"><span className="pill live-pill"><i className="dot online"/> AUDIENCE PREVIEW · LIVE SESSION</span><span className="timer">SESSION ENDS IN {Math.floor(secondsLeft/60)}:{String(secondsLeft%60).padStart(2,"0")}</span></div>
+      <section className={`audience-hero-scene ${audienceRisk.tone}`} aria-label="Live cinematic hillside model">
+        <div className="audience-scene-label"><span>THEVA LIVE · HILLSIDE MONITORING</span><span><i className="dot online"/> CLOUD SYNC</span></div>
+        <HillScene sensors={audienceSensors} risk={audienceRisk} scene={audienceScene} audience deviceTelemetryActive={Boolean(audienceDeviceReadings)} />
+        <div className={`audience-theva-overlay ${audienceRisk.tone}`}>
+          <img src={`/images/theva/${({Safe:"theva-explorer",Watch:"theva-scientist",High:"theva-safety",Evacuation:"theva-rescue"}[audienceRisk.level] || "theva-explorer")}.webp`} alt={`Theva in ${audienceRisk.level.toLowerCase()} field gear`}/>
+          <div className="theva-speech-bubble"><span className="eyebrow">THEVA HERE!</span><p>{audienceRisk.level === "Evacuation" ? "Our model is showing its highest alert. Move calmly to the safe area your teacher has identified and stay with your group." : audienceRisk.level === "High" ? "The readings show a high-risk pattern. Follow your teacher's safety instructions and keep away from the model slope." : audienceRisk.level === "Watch" ? "The hillside is under WATCH. The sensors show some changes in moisture and rain. Let's stay alert!" : audienceRisk.level === "Unavailable" ? "Some sensor signals are unavailable. Let's ask the operator to check the readings." : "The hillside looks calm right now. Let's watch how rain, soil moisture and ground movement change the model."}</p></div>
+        </div>
+      </section>
+      <section className={`audience-risk audience-risk-mockup ${audienceRisk.tone}`}>
+        <div className="risk-headline"><div><span>CURRENT INDICATION</span><h2>{audienceRisk.level.toUpperCase()}</h2><p>{audienceRisk.message}</p></div><AlertTriangle aria-hidden="true"/></div>
+        <div className="audience-risk-scale"><span className="safe">●</span><span className="watch">●</span><span className="high">●</span><span className="critical">●</span><span className="na">●</span></div>
+        <div className="audience-risk-labels"><span>Safe</span><span>Watch</span><span>High</span><span>Evacuation</span><span>N/A</span></div>
+      </section>
+      <section className="audience-readings-card audience-readings-mockup">
+        <div className="audience-sensors">{audienceSensors.map(sensor => {
+          const SensorIcon = sensor.id === "moisture" ? Droplets : sensor.id === "rainfall" ? CloudRain : Activity;
+          const unit = sensor.id === "moisture" ? "%" : sensor.id === "rainfall" ? "mm/h" : "mm";
+          return <div className={`audience-sensor ${sensor.id} ${sensor.failed ? "failed" : ""}`} key={sensor.id}>
+            <SensorIcon aria-hidden="true"/><b>{sensor.name}</b><strong>{sensor.failed ? "—" : sensor.value} <small>{sensor.failed ? "" : unit}</small></strong>
+            <span className="sensor-trend" aria-hidden="true"><i/><i/><i/><i/><i/></span>
+          </div>;
+        })}</div>
+      </section>
+      <section className={`audience-precautions audience-precautions-mockup ${audienceRisk.tone}`}>
+        <h2><ShieldCheck aria-hidden="true"/> Precaution for {audienceRisk.level}</h2>
+        <div className="audience-precaution-grid">
+          <article><Footprints/><span>{audienceRisk.level === "Evacuation" ? "Move calmly to safety" : audienceRisk.level === "High" ? "Stay away from the slope" : audienceRisk.level === "Watch" ? "Be alert in slope areas" : "Observe changes carefully"}</span></article>
+          <article><Users/><span>{audienceRisk.level === "Evacuation" || audienceRisk.level === "High" ? "Follow your teacher's advice" : audienceRisk.level === "Watch" ? "Avoid unnecessary travel" : "Discuss readings with the operator"}</span></article>
+          <article><House/><span>{audienceRisk.level === "Evacuation" ? "Stay with your group in safety" : audienceRisk.level === "High" || audienceRisk.level === "Watch" ? "Be prepared to move to a safer place" : "Keep learning how slopes respond"}</span></article>
+        </div>
+      </section>
       <div className="audience-session-meta"><span>{audienceDeviceReadings ? "ESP32 DEVICE · SIMULATED TEST ONLY" : audienceVirtualOverrideActive ? "VIRTUAL OVERRIDE · SIMULATED TEST ONLY" : "AUTOMATIC VIRTUAL FALLBACK"}</span><span>{sharedUpdatedAt ? "Updated " + new Date(sharedUpdatedAt).toLocaleTimeString() : "Waiting for operator data"}</span><span>Cloud {syncStatus}</span></div>
-      <p className="disclaimer">A learning model · Not a real-world prediction system · Audio alerts are demonstration only</p>
+      <p className="disclaimer">A learning model · Not a real-world prediction system</p>
       <button className="btn secondary audience-feedback-button" onClick={() => setPage("feedback")}>Share feedback</button>
     </main>}
 
