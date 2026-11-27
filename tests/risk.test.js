@@ -32,3 +32,24 @@ test("keeps intermediate values in the correct bands at threshold boundaries", (
 test("reports Unavailable when every sensor is unhealthy", () => {
   assert.equal(assess([]).level, "Unavailable");
 });
+
+
+test("classifies every integer sensor combination from 0 through 100", () => {
+  for (let moisture = 0; moisture <= 100; moisture += 1) {
+    for (let rainfall = 0; rainfall <= 100; rainfall += 1) {
+      for (let movement = 0; movement <= 100; movement += 1) {
+        const values = [moisture, rainfall, movement];
+        const high = values.filter(value => value >= 60).length;
+        const critical = values.filter(value => value >= 80).length;
+        const expected = critical >= 2 ? "Evacuation"
+          : critical >= 1 || high >= 2 ? "High"
+            : values.some(value => value >= 35) ? "Watch" : "Safe";
+        assert.equal(assess(values).level, expected, `Unexpected classification for ${values.join(",")}`);
+      }
+    }
+  }
+});
+
+test("the reported 0 / 100 / 100 combination is an Evacuation state", () => {
+  assert.equal(assess([0, 100, 100]).level, "Evacuation");
+});
