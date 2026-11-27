@@ -1060,3 +1060,218 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 @media(max-width:560px){
   .topbar .topbar-brand-logo{width:32px;height:32px;flex-basis:32px}
 }
+
+
+/* Audience Preview refresh — cinematic landscape with layered learning panels */
+@media (min-width: 621px) {
+  .public-display {
+    height: 100svh;
+    min-height: 620px;
+    max-height: 100svh;
+    overflow: hidden;
+    padding: 12px 16px 8px;
+    gap: 8px;
+    grid-template-rows: auto auto minmax(0,1fr) auto;
+  }
+  .display-header { min-height: 48px; padding-bottom: 6px; }
+  .display-content {
+    position: relative;
+    display: grid;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+    grid-template-columns: minmax(0,1.45fr) minmax(330px,.82fr);
+    grid-template-rows: repeat(3,minmax(0,1fr));
+    grid-template-areas: "scene risk" "scene data" "scene precautions";
+    gap: 10px 14px;
+    overflow: hidden;
+  }
+  .display-scene-wrap {
+    grid-area: scene;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 16px;
+    background: transparent;
+    overflow: hidden;
+  }
+  .display-scene-wrap .display-section-head {
+    position: absolute;
+    z-index: 2;
+    top: 10px;
+    left: 12px;
+    display: none;
+  }
+  .display-scene-wrap .audience-hill {
+    display: flex !important;
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 16px;
+    overflow: hidden;
+    background: transparent;
+  }
+  .display-scene-wrap .audience-hill .hill-visual {
+    flex: 1 1 auto !important;
+    width: 100%;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    aspect-ratio: auto !important;
+    border: 1px solid #496b52;
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .display-scene-wrap .audience-hill .hill-visual-image { object-fit: cover; }
+  .display-risk {
+    grid-area: risk;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    min-width: 0;
+    min-height: 0;
+    padding: clamp(12px,1.25vw,20px);
+    border-radius: 16px;
+    gap: 8px;
+  }
+  .display-risk .eyebrow { font-size: 10px; }
+  .display-risk h1 { font-size: clamp(30px,3vw,48px); }
+  .display-risk > p { font-size: clamp(12px,.95vw,15px); line-height: 1.35; }
+  .display-risk .display-action {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-left: 0;
+    border-top: 1px solid #ffffff2c;
+    padding: 8px 0 0;
+    font-size: 11px;
+  }
+  .display-data {
+    grid-area: data;
+    min-width: 0;
+    min-height: 0;
+    padding: 12px;
+    border-radius: 16px;
+    gap: 8px;
+  }
+  .display-data .display-section-head h2 { font-size: clamp(16px,1.3vw,21px); }
+  .display-data .display-sensors {
+    grid-template-rows: repeat(3,minmax(0,1fr)) !important;
+    gap: 7px !important;
+  }
+  .display-data .display-sensor {
+    min-height: 0 !important;
+    height: 100%;
+    padding: 8px 10px !important;
+  }
+  .display-data .display-sensor b { font-size: clamp(11px,.85vw,14px); }
+  .display-data .display-sensor strong { font-size: clamp(18px,1.65vw,26px); }
+  .display-theva {
+    position: absolute;
+    z-index: 3;
+    left: 1%;
+    bottom: 1.5%;
+    width: min(54%,650px);
+    min-width: 0;
+    height: 43%;
+    min-height: 180px;
+    max-height: 310px;
+    display: grid;
+    grid-template-columns: minmax(110px,.72fr) minmax(0,1.35fr);
+    align-items: end;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid #79b88a;
+    border-radius: 18px;
+    background: linear-gradient(100deg,rgba(5,30,19,.08),rgba(5,30,19,.92) 35%,rgba(5,30,19,.94));
+    box-shadow: 0 12px 35px #0008;
+    overflow: hidden;
+  }
+  .theva-character-stage { min-width: 0; min-height: 0; height: 100%; }
+  .theva-character-art { width: 100%; height: 100%; max-height: 100%; object-fit: contain; object-position: center bottom; }
+  .theva-character-caption { font-size: 7px; }
+  .theva-dialogue { min-width: 0; overflow: auto; max-height: 100%; }
+  .theva-dialogue .eyebrow { font-size: 8px; }
+  .theva-dialogue h2 { font-size: clamp(14px,1.1vw,19px); margin: 4px 0; }
+  .theva-dialogue > p { font-size: clamp(10px,.8vw,13px); line-height: 1.35; margin: 0; }
+  .display-precautions {
+    grid-area: precautions;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    min-height: 0;
+    padding: 12px;
+    border: 1px solid #3d684b;
+    border-radius: 16px;
+    background: linear-gradient(145deg,#132b1d,#0b1c13);
+    overflow: hidden;
+  }
+  .display-precautions.watch,.display-precautions.unavailable { border-color: #8e7138; background: linear-gradient(145deg,#302b19,#1b1c13); }
+  .display-precautions.high,.display-precautions.critical { border-color: #9d5140; background: linear-gradient(145deg,#342019,#1c1714); }
+  .precautions-heading { display: flex; align-items: center; gap: 8px; color: #f3d36f; margin-bottom: 10px; }
+  .precautions-heading h2 { font: 700 clamp(15px,1.25vw,20px) var(--display); margin: 0; }
+  .precautions-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; min-height: 0; }
+  .precautions-grid article { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; padding: 7px; border-right: 1px solid #ffffff26; }
+  .precautions-grid article:last-child { border-right: 0; }
+  .precautions-grid svg { width: 21px; height: 21px; color: #8de39e; flex: 0 0 auto; }
+  .precautions-grid b { font-size: clamp(10px,.78vw,13px); color: #e6f4e9; }
+  .precautions-grid span { font-size: clamp(9px,.68vw,11px); line-height: 1.3; color: #c1d3c5; }
+  .precautions-note { margin: 7px 0 0; font: 8px var(--mono); color: #a6b9aa; }
+}
+@media (max-width: 620px) {
+  .public-display {
+    height: auto; min-height: 100svh; max-height: none; overflow: visible;
+    padding: 9px; gap: 8px;
+    grid-template-rows: auto auto minmax(0,1fr) auto;
+  }
+  .display-content {
+    display: grid; position: static; width: 100%; height: auto; max-height: none; min-height: 0;
+    grid-template-columns: minmax(0,1fr);
+    grid-template-rows: auto auto auto auto auto;
+    grid-template-areas: "scene" "theva" "risk" "data" "precautions";
+    gap: 8px; overflow: visible;
+  }
+  .display-scene-wrap { grid-area: scene; padding: 0; border: 0; background: transparent; }
+  .display-scene-wrap .display-section-head { display: none; }
+  .display-scene-wrap .audience-hill { display: flex!important; width: 100%; height: auto; min-height: 0; max-height: none; overflow: visible; }
+  .display-scene-wrap .audience-hill .hill-visual { width: 100%; height: auto!important; min-height: 0!important; max-height: none!important; aspect-ratio: 16/9!important; }
+  .display-theva {
+    position: static; grid-area: theva; width: auto; height: auto; min-height: 190px; max-height: none;
+    grid-template-columns: minmax(105px,.72fr) minmax(0,1.6fr);
+    padding: 10px; border: 1px solid #497c59; border-radius: 14px;
+    background: linear-gradient(110deg,#102b1d,#0a1d14); box-shadow: none; overflow: hidden;
+  }
+  .theva-character-stage { min-height: 170px; height: 100%; }
+  .theva-character-art { height: 170px; max-height: 170px; object-fit: contain; }
+  .theva-dialogue { overflow: visible; }
+  .theva-dialogue .eyebrow { font-size: 7px; }
+  .theva-dialogue h2 { font-size: 14px; }
+  .theva-dialogue > p { font-size: 10px; line-height: 1.4; }
+  .display-risk { grid-area: risk; display: grid; grid-template-columns: 1fr auto; padding: 12px; min-height: 0; }
+  .display-risk .eyebrow { grid-column: 1; font-size: 8px; }
+  .display-risk h1 { grid-column: 2; grid-row: 1/3; font-size: 30px; }
+  .display-risk > p { grid-column: 1/-1; font-size: 11px; }
+  .display-risk .display-action { display: none; }
+  .display-data { grid-area: data; }
+  .display-precautions { grid-area: precautions; display: flex; flex-direction: column; padding: 11px; border: 1px solid #3d684b; border-radius: 14px; background: #10251a; }
+  .precautions-heading { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; color: #f3d36f; }
+  .precautions-heading h2 { font: 700 16px var(--display); margin: 0; }
+  .precautions-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; }
+  .precautions-grid article { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 6px 5px; border-right: 1px solid #ffffff26; }
+  .precautions-grid article:last-child { border-right: 0; }
+  .precautions-grid svg { width: 19px; height: 19px; color: #8de39e; }
+  .precautions-grid b { font-size: 9px; color: #e6f4e9; }
+  .precautions-grid span { font-size: 8px; line-height: 1.3; color: #c1d3c5; }
+  .precautions-note { margin: 7px 0 0; font: 7px var(--mono); color: #a6b9aa; }
+}
