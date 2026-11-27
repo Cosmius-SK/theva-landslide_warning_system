@@ -1069,7 +1069,7 @@ function ThevaApp() {
   return <div className={"app-shell" + (page === "audience" ? " audience-shell" : page === "operator" ? " operator-shell" : "")}>
     <header className="topbar">
       <a className="brand" href="#" onClick={e => {e.preventDefault(); setPage("operator");}}>
-        <span className="brand-mark">T</span><span><b>THEVA LIVE</b><small>LANDSLIDE EARLY WARNING SYSTEM</small></span>
+        <img className="brand-logo topbar-brand-logo" src="/brand/theva-logo.webp" alt="" /><span><b>THEVA LIVE</b><small>LANDSLIDE EARLY WARNING SYSTEM</small></span>
       </a>
       <div className="top-actions"><span className="connection"><i className={"dot " + (syncStatus === "connected" ? "online" : "offline")} />{syncStatus === "connected" ? "CLOUD SYNC" : syncStatus === "not-configured" ? "LOCAL MODE" : "CLOUD OFFLINE"}</span><span className="mode-chip">DEMO BUILD 0.2</span></div>
     </header>
