@@ -1158,7 +1158,7 @@ function ThevaApp() {
       </section>
       <section className={`audience-risk audience-risk-mockup ${audienceRisk.tone}`}>
         <div className="risk-headline"><div><span>CURRENT INDICATION</span><h2>{audienceRisk.level.toUpperCase()}</h2><p>{audienceRisk.message}</p></div><AlertTriangle aria-hidden="true"/></div>
-        <div className="audience-risk-scale"><span className="safe">●</span><span className="watch">●</span><span className="high">●</span><span className="critical">●</span><span className="na">●</span></div>
+        <div className="audience-risk-scale"><span className={`safe ${audienceRisk.level === "Safe" ? "active" : ""}`}>●</span><span className={`watch ${audienceRisk.level === "Watch" ? "active" : ""}`}>●</span><span className={`high ${audienceRisk.level === "High" ? "active" : ""}`}>●</span><span className={`critical ${audienceRisk.level === "Evacuation" ? "active" : ""}`}>●</span><span className={`na ${audienceRisk.level === "Unavailable" ? "active" : ""}`}>●</span></div>
         <div className="audience-risk-labels"><span>Safe</span><span>Watch</span><span>High</span><span>Evacuation</span><span>N/A</span></div>
       </section>
       <section className="audience-readings-card audience-readings-mockup">
