@@ -196,7 +196,7 @@ function IntroVideoOverlay({ onClose }) {
     <div className="intro-video-controls"><span>SRI KRISH TECHNOSIUM · 2026–27</span><div>
       {!soundEnabled && <button type="button" className="intro-video-button" onClick={enableSound}>Enable sound</button>}
       {playBlocked && <button type="button" className="intro-video-button" onClick={() => videoRef.current?.play().then(() => setPlayBlocked(false)).catch(() => {})}>Play video</button>}
-      <button type="button" className="intro-video-button" onClick={onClose} aria-label="Close introduction"><X size={16}/> Close</button>
+      <button type="button" className="intro-video-button" onClick={onClose} aria-label="Close introduction">× Close</button>
     </div></div>
   </div>;
 }
