@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { Activity, AlertTriangle, CheckCircle2, CloudRain, Droplets, Gauge, Radio, RotateCcw, ShieldCheck, Signal, WifiOff } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, CloudRain, Droplets, Gauge, Play, Radio, RotateCcw, ShieldCheck, Signal, WifiOff, X } from "lucide-react";
 import { realtimeEnabled, supabase } from "./lib/supabase";
 import { assess } from "./lib/risk";
 import { normalizeScene, SCENE_VIEWS, sceneImagePath } from "./lib/scenes";
@@ -182,11 +182,29 @@ function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience 
   </section>;
 }
 
+const INTRO_VIDEO_SRC = "/videos/sri-krish-technosium-intro.mp4";
+function IntroVideoOverlay({ onClose }) {
+  const videoRef = useRef(null);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [playBlocked, setPlayBlocked] = useState(false);
+  useEffect(() => { const video = videoRef.current; if (!video) return; video.muted = true; video.play().then(() => setPlayBlocked(false)).catch(() => setPlayBlocked(true)); }, []);
+  function enableSound() { const video = videoRef.current; if (!video) return; video.muted = false; setSoundEnabled(true); video.play().catch(() => setPlayBlocked(true)); }
+  return <div className="intro-video-overlay" role="dialog" aria-modal="true" aria-label="Sri Krish Technosium introduction">
+    <video ref={videoRef} className="intro-video-player" src={INTRO_VIDEO_SRC} autoPlay muted playsInline preload="auto" onEnded={onClose} onError={() => setPlayBlocked(true)} />
+    <div className="intro-video-controls"><span>SRI KRISH TECHNOSIUM · 2026–27</span><div>
+      {!soundEnabled && <button type="button" className="intro-video-button" onClick={enableSound}>Enable sound</button>}
+      {playBlocked && <button type="button" className="intro-video-button" onClick={() => videoRef.current?.play().then(() => setPlayBlocked(false)).catch(() => {})}>Play video</button>}
+      <button type="button" className="intro-video-button" onClick={onClose} aria-label="Close introduction"><X size={16}/> Close</button>
+    </div></div>
+  </div>;
+}
+
 function PublicDisplay() {
   const [state, setState] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(null);
   const [operatorConnected, setOperatorConnected] = useState(null);
   const [connection, setConnection] = useState("connecting");
+  const [introPlaybackKey, setIntroPlaybackKey] = useState(0);
   const updatedAtRef = useRef(null);
   const deviceTelemetry = useDeviceTelemetry(true);
 
@@ -227,6 +245,7 @@ function PublicDisplay() {
         .on("postgres_changes", { event: "*", schema: "public", table: "demo_state", filter: "id=eq.1" }, payload => {
           if (!stopped && payload.new?.state) accept(payload.new.state, payload.new.updated_at);
         })
+        .on("broadcast", { event: "play-intro" }, () => { if (!stopped) setIntroPlaybackKey(key => key + 1); })
         .subscribe(status => {
           if (stopped) return;
           if (status === "SUBSCRIBED") poll();
@@ -295,6 +314,7 @@ function PublicDisplay() {
       </aside>
     </div>
     <footer className="display-disclaimer">EDUCATIONAL SIMULATION – NOT A REAL-WORLD LANDSLIDE WARNING SYSTEM</footer>
+    {introPlaybackKey > 0 && <IntroVideoOverlay key={introPlaybackKey} onClose={() => setIntroPlaybackKey(0)} />}
   </main>;
 }
 
@@ -323,6 +343,7 @@ function ThevaApp() {
   const [audienceSessionUrl, setAudienceSessionUrl] = useState("");
   const [audienceSessionQr, setAudienceSessionQr] = useState("");
   const [audienceSessionError, setAudienceSessionError] = useState("");
+  const [showAudienceIntro, setShowAudienceIntro] = useState(false);
   const [operatorActive, setOperatorActive] = useState(false);
   const [operatorHydrated, setOperatorHydrated] = useState(false);
   const [operatorOwnerId, setOperatorOwnerId] = useState("");
@@ -417,6 +438,9 @@ function ThevaApp() {
         setAudienceExpiresAt(data.expiresAt);
         setSecondsLeft(Math.max(0, Math.ceil((Date.parse(data.expiresAt) - Date.now()) / 1000)));
         setAudienceSessionError("");
+        const introSeenKey = `theva_intro_seen_${audienceToken}`;
+        try { if (window.localStorage.getItem(introSeenKey) !== "1") { window.localStorage.setItem(introSeenKey, "1"); setShowAudienceIntro(true); } }
+        catch { setShowAudienceIntro(true); }
         setPage("audience");
       } catch {
         if (!stopped) returnToWelcome("The audience session could not be verified. Reconnect and try the link again.");
@@ -899,6 +923,25 @@ function ThevaApp() {
     } catch (error) { setAudienceSessionError(error.message); }
   }
 
+  async function playIntroOnPublicDisplay() {
+    if (!supabase) { setAudienceSessionError("Public display remote control requires Supabase Realtime."); return; }
+    let channel;
+    try {
+      channel = supabase.channel("theva-public-display");
+      await new Promise((resolve, reject) => {
+        const timeout = window.setTimeout(() => reject(new Error("Public display connection timed out.")), 8000);
+        channel.subscribe(status => {
+          if (status === "SUBSCRIBED") { window.clearTimeout(timeout); resolve(); }
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") { window.clearTimeout(timeout); reject(new Error("Could not connect to the public display.")); }
+        });
+      });
+      const result = await channel.send({ type: "broadcast", event: "play-intro", payload: { requestedAt: new Date().toISOString() } });
+      if (result !== "ok") throw new Error("The public display did not accept the playback command.");
+      setAudienceSessionError("Technosium intro playback command sent to the public display.");
+    } catch (error) { setAudienceSessionError(error.message || "Could not start the Technosium intro."); }
+    finally { if (channel) await supabase.removeChannel(channel); }
+  }
+
   async function endAudienceSession() {
     try {
       await operatorSessionRequest("end");
@@ -1039,7 +1082,7 @@ function ThevaApp() {
                 {lockError && <p className="session-message" role="status">{lockError}</p>}
                 {publishError && <p className="session-message" role="status">{publishError}</p>}
                 <div className="audience-session-card">
-                  <div className="operator-access-row"><div><b>Audience session</b><small>{audienceSessionActive ? `Active until ${audienceSessionExpiresAt ? new Date(audienceSessionExpiresAt).toLocaleTimeString() : "expiry"}.` : "Server-validated · 7 minutes"}</small></div><div className="audience-session-actions"><button className="btn secondary" onClick={startAudienceSession} disabled={lockStatus !== "active"}>{audienceSessionActive ? "Replace link" : "Start session"}</button>{audienceSessionActive && <button className="btn danger" onClick={endAudienceSession} disabled={lockStatus !== "active"}>End</button>}</div></div>
+                  <div className="operator-access-row"><div><b>Audience session</b><small>{audienceSessionActive ? `Active until ${audienceSessionExpiresAt ? new Date(audienceSessionExpiresAt).toLocaleTimeString() : "expiry"}.` : "Server-validated · 7 minutes"}</small></div><div className="audience-session-actions"><button className="btn secondary" onClick={startAudienceSession} disabled={lockStatus !== "active"}>{audienceSessionActive ? "Replace link" : "Start session"}</button><button className="btn secondary" onClick={playIntroOnPublicDisplay} disabled={lockStatus !== "active" || !supabase}><Play size={14}/> Play Technosium intro</button>{audienceSessionActive && <button className="btn danger" onClick={endAudienceSession} disabled={lockStatus !== "active"}>End</button>}</div></div>
                   {audienceSessionActive && audienceSessionUrl && <div className="audience-session-link"><input aria-label="Audience session link" value={audienceSessionUrl} readOnly onFocus={e => e.target.select()} /><button className="btn secondary" onClick={copyAudienceSessionLink}>Copy</button>{audienceSessionQr && <img className="audience-session-qr" src={audienceSessionQr} alt="QR code for the active audience session" />}</div>}
                   {audienceSessionActive && !audienceSessionUrl && <small className="session-link-note">Link hidden after reconnect. Replace it to issue a new link.</small>}
                   {audienceSessionError && <p className="session-message" role="status">{audienceSessionError}</p>}
@@ -1074,6 +1117,7 @@ function ThevaApp() {
     {page === "expired" && <main className="form-page centered"><div className="eyebrow">THANK YOU FOR EXPLORING</div><h1>This demo session has ended.</h1><p>We hope you discovered something new about landslide early warning systems.</p><button className="btn primary large" onClick={() => setPage("welcome")}>Return to welcome page</button><button className="text-btn" onClick={() => setPage("feedback")}>Share feedback</button></main>}
     {page === "thanks" && <main className="form-page centered"><div className="success-mark"><CheckCircle2 size={34}/></div><h1>Thank you!</h1><p>Your feedback has been saved.</p><button className="btn primary" onClick={() => setPage("welcome")}>Back to welcome page</button></main>}
 
+    {showAudienceIntro && page === "audience" && <IntroVideoOverlay onClose={() => setShowAudienceIntro(false)} />}
     <footer className="footer"><span>THEVA LIVE <i>·</i> EDUCATIONAL PROTOTYPE</span><span>Built to learn. Designed to protect.</span></footer>
   </div>;
 }
