@@ -187,15 +187,25 @@ function HillScene({ sensors, risk, scene = "panorama", onSceneChange, audience 
 const INTRO_VIDEO_SRC = "/videos/sri-krish-technosium-intro.mp4";
 function IntroVideoOverlay({ onClose }) {
   const videoRef = useRef(null);
-  const [soundEnabled, setSoundEnabled] = useState(false);
   const [playBlocked, setPlayBlocked] = useState(false);
-  useEffect(() => { const video = videoRef.current; if (!video) return; video.muted = true; video.play().then(() => setPlayBlocked(false)).catch(() => setPlayBlocked(true)); }, []);
-  function enableSound() { const video = videoRef.current; if (!video) return; video.muted = false; setSoundEnabled(true); video.play().catch(() => setPlayBlocked(true)); }
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = false;
+    video.volume = 1;
+    video.play().then(() => setPlayBlocked(false)).catch(() => setPlayBlocked(true));
+  }, []);
+  function playWithSound() {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = false;
+    video.volume = 1;
+    video.play().then(() => setPlayBlocked(false)).catch(() => setPlayBlocked(true));
+  }
   return <div className="intro-video-overlay" role="dialog" aria-modal="true" aria-label="Sri Krish Technosium introduction">
-    <video ref={videoRef} className="intro-video-player" src={INTRO_VIDEO_SRC} autoPlay muted playsInline preload="auto" onEnded={onClose} onError={() => setPlayBlocked(true)} />
+    <video ref={videoRef} className="intro-video-player" src={INTRO_VIDEO_SRC} autoPlay playsInline preload="auto" onEnded={onClose} onError={() => setPlayBlocked(true)} />
     <div className="intro-video-controls"><span>SRI KRISH TECHNOSIUM · 2026–27</span><div>
-      {!soundEnabled && <button type="button" className="intro-video-button" onClick={enableSound}>Enable sound</button>}
-      {playBlocked && <button type="button" className="intro-video-button" onClick={() => videoRef.current?.play().then(() => setPlayBlocked(false)).catch(() => {})}>Play video</button>}
+      {playBlocked && <button type="button" className="intro-video-button" onClick={playWithSound}>▶ Play with sound</button>}
       <button type="button" className="intro-video-button" onClick={onClose} aria-label="Close introduction">× Close</button>
     </div></div>
   </div>;
